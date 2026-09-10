@@ -8,16 +8,20 @@ export const metadata = { title: "Sign in · IIM Bound" };
  * Sign-in and sign-up, in the app's own shell.
  *
  * Clerk's component does the work — email or username with a password, plus
- * Google — because every one of those flows is harder to get right by hand than
- * it looks, and Supabase's hosted form is what this replaces. The page keeps
- * its own masthead and copy so the first screen still looks like this app
- * rather than like a vendor's.
+ * Google if it is configured — because every one of those flows is harder to
+ * get right by hand than it looks, and Supabase's hosted form is what this
+ * replaces. The page keeps its own masthead and copy so the first screen still
+ * looks like this app rather than like a vendor's.
  *
  * `withSignUp` is what makes one screen enough. Without it `<SignIn>` is
  * sign-in only: an address it does not recognise comes back as "couldn't find
  * your account", and the "Sign up" link goes wherever NEXT_PUBLIC_CLERK_SIGN_UP_URL
  * points — which is here, because there is no second page. That combination
  * left a new person with no way in at all.
+ *
+ * Where the user came from is the proxy's job, not this page's: the gate
+ * redirects to `?redirect_url=`, which Clerk reads and carries across its own
+ * sign-in/sign-up navigation. Nothing here needs to know about it.
  */
 export default function LoginPage() {
   return (

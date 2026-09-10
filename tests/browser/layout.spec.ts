@@ -7,7 +7,7 @@
  * can prove it is fixed.
  */
 
-import { anonTest, expect, paintedRows, settle, test } from "./fixtures";
+import { anonTest, expect, paintedRows, settle, submitSignInForm, test } from "./fixtures";
 
 const APP_PAGES = ["/today", "/mocks", "/syllabus", "/errors", "/settings"];
 
@@ -207,6 +207,39 @@ test.describe("signing in", () => {
     await page.goto("/login");
     await expect(page.locator('input[name="password"]')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole("button", { name: /continue/i }).first()).toBeVisible();
+  });
+
+  anonTest("comes back to the page you were going to", async ({ page }) => {
+    // The gate promises this and, for a while, did not deliver it. It used to
+    // redirect to `?next=`, and Clerk preserves `redirect_url` across its own
+    // sign-in/sign-up navigation and nothing else — so a deep link landed on
+    // the fallback, and the one route the promise appeared to hold for was the
+    // one route it was never tested against.
+    //
+    // Signed in through the form rather than with a ticket, deliberately: the
+    // ticket shortcut calls setActive directly and resolves its own
+    // destination, so it cannot see what the component was told to do. It
+    // reported this as broken when it was fixed and as fine when it was not.
+    await page.goto("/errors");
+    await expect(page).toHaveURL(/\/login\?redirect_url=%2Ferrors$/);
+
+    await submitSignInForm(page);
+
+    await expect(page, "signing in should return to /errors, not /today").toHaveURL(/\/errors$/);
+  });
+
+  anonTest("refuses to be sent off-site by the query string", async ({ page }) => {
+    // Nothing here writes `redirect_url` — the proxy computes it from the path
+    // it is gating — but the parameter is user-editable, so the browser must
+    // never end up somewhere that is not this app.
+    await page.goto("/login?redirect_url=%2F%2Fevil.com");
+    await expect(page.locator('input[name="identifier"]')).toBeVisible({ timeout: 20_000 });
+
+    await submitSignInForm(page);
+
+    await expect(page, "a protocol-relative redirect is not a destination").toHaveURL(
+      /localhost:3100\/(today)?$/,
+    );
   });
 });
 

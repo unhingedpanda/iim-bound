@@ -34,9 +34,11 @@ describe("route protection", () => {
       const { response, location } = await request(path);
       assert.equal(response.status, 307, `${path} should redirect`);
       assert.ok(location?.startsWith("/login"), `${path} → ${location}`);
-      // The parameter arrives percent-encoded, so compare it decoded.
-      const next = new URL(location, APP_URL).searchParams.get("next");
-      assert.equal(next, path, `${path} should carry a next so the visit is not lost`);
+      // The parameter arrives percent-encoded, so compare it decoded. The name
+      // matters as much as the value: Clerk reads `redirect_url` and ignores
+      // anything else, so `next` here would be a redirect that never happens.
+      const back = new URL(location, APP_URL).searchParams.get("redirect_url");
+      assert.equal(back, path, `${path} should carry a way back so the visit is not lost`);
     }
   });
 
@@ -99,8 +101,8 @@ describe("sign-in", () => {
     // `next=//evil.com` is a protocol-relative URL: `${origin}${next}` lands the
     // visitor on another host with a real sign-in link as the bait. This test
     // used to point at /auth/callback, which no longer exists — but the rule it
-    // was protecting still does, in safeNext() and in the proxy, so it is
-    // asserted against the surfaces that consume the parameter today.
+    // was protecting still does, because the proxy owns the parameter and only
+    // ever writes the path it is gating.
     const hostile = ["//evil.com/x", "https://evil.com", "/\\evil.com", "//evil.com"];
     for (const value of hostile) {
       const { location } = await request(`/today?next=${encodeURIComponent(value)}`);
@@ -108,12 +110,12 @@ describe("sign-in", () => {
       assert.equal(target.hostname, new URL(APP_URL).hostname, `${value} changed host`);
       assert.equal(target.port, new URL(APP_URL).port, `${value} left the app's port`);
       assert.equal(target.pathname, "/login", `${value} did not land on sign-in`);
-      // The proxy owns this parameter and only ever writes the path it is
-      // gating, so a hostile value cannot survive into the redirect.
+      // The proxy computes this itself and never copies the incoming value, so
+      // a hostile `next` cannot survive into the redirect.
       assert.equal(
-        target.searchParams.get("next"),
+        target.searchParams.get("redirect_url"),
         "/today",
-        `${value} influenced the next parameter`,
+        `${value} influenced the redirect parameter`,
       );
     }
   });

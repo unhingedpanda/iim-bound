@@ -1,18 +1,23 @@
 /**
  * A signed-in browser, and the vocabulary the specs share.
  *
- * Authentication is real: Clerk's testing token gets a headless browser past
- * bot protection, and `clerk.signIn` mints a sign-in ticket through Clerk's
- * backend API, so the session, the cookies and the Supabase JWT are the same
- * ones a person gets. Nothing is faked — this suite exists to prove the
- * Clerk-to-Supabase chain works, and a stubbed session would prove the opposite
- * of what it claims.
+ * Authentication is real, and it goes through the form. An earlier version used
+ * `clerk.signIn`, which mints a ticket through Clerk's backend API and calls
+ * `Clerk.setActive` directly — faster, and it proved the session and the
+ * Supabase JWT, but it skipped the component entirely. That mattered the moment
+ * the gate started promising to return you to the page you were going to:
+ * `setActive` resolves its destination from Clerk's options, so every ticket
+ * sign-in landed on the fallback and the promise looked broken when it was not,
+ * and would have looked fine if it had been.
  *
- * The signed-in state is captured once and reused, because signing in per test
+ * A real sign-in also gets past device trust without a bypass, because it is
+ * the browser Clerk expects. `setupClerkTestingToken` stays for bot protection.
+ *
+ * The resulting state is captured once and reused, because signing in per test
  * is slow and the state is portable: cookies plus localStorage.
  */
 
-import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
+import { setupClerkTestingToken } from "@clerk/testing/playwright";
 import { test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
@@ -26,16 +31,47 @@ const STATE = "/tmp/iim-bound-browser-state.json";
 export const E2E_EMAIL = process.env.E2E_CLERK_EMAIL ?? "e2e-clerk@gmail.com";
 
 /**
- * Sign in for real, then remember it.
+ * Its password, which the suite needs only because it fills the form in.
  *
- * Clerk requires a page that loads its client before signIn is called, and the
- * session it establishes is stored in cookies and localStorage — which is
- * exactly what a storage state captures.
+ * Clerk's device trust is switched off on the *development* instance so this
+ * can work headlessly; production keeps it on, and nothing here touches
+ * production.
  */
+export const E2E_PASSWORD = process.env.E2E_CLERK_PASSWORD ?? "e2e-clerk-password-123";
+
+/**
+ * Type the credentials into Clerk's form and submit, as a person would.
+ *
+ * Assumes the page is already on /login with the form mounted, and waits until
+ * Clerk has navigated away from it — wherever it was told to go. What that
+ * destination is, is the caller's assertion to make.
+ */
+export async function submitSignInForm(page: Page) {
+  await setupClerkTestingToken({ page });
+
+  const identifier = page.locator('input[name="identifier"]');
+  const password = page.locator('input[name="password"]');
+  const submit = page.getByRole("button", { name: /^continue$/i }).first();
+
+  // Clerk shows the identifier first and reveals the password field once it
+  // knows whether the address exists. Both steps submit with the same button.
+  await identifier.waitFor({ timeout: 30_000 });
+  await identifier.fill(E2E_EMAIL);
+  await submit.click();
+
+  await password.waitFor({ timeout: 30_000 });
+  await password.fill(E2E_PASSWORD);
+  await submit.click();
+
+  await page.waitForFunction(() => !window.location.pathname.startsWith("/login"), null, {
+    timeout: 30_000,
+  });
+}
+
+/** Sign in for real, then remember it. */
 export async function signIn(page: Page) {
   await page.goto(`${APP_URL}/login`);
-  await setupClerkTestingToken({ page });
-  await clerk.signIn({ page, emailAddress: E2E_EMAIL });
+  await submitSignInForm(page);
   mkdirSync(dirname(STATE), { recursive: true });
   await page.context().storageState({ path: STATE });
 }

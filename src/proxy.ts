@@ -44,7 +44,18 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
     const redirect = request.nextUrl.clone();
     redirect.pathname = goToLogin ? "/login" : "/today";
     redirect.search = "";
-    if (goToLogin) redirect.searchParams.set("next", path);
+    if (goToLogin) {
+      // Clerk preserves `redirect_url` across its own navigation between the
+      // sign-in and sign-up views, and honours it however the attempt
+      // completes — password, ticket or OAuth. It has never heard of a
+      // parameter called `next`, which is what this used to send: that value
+      // was dropped the moment someone clicked "Sign up" and ignored on the way
+      // back, so every deep link landed on the fallback and the promise to
+      // return you where you were going held for exactly one route — the one
+      // that happened to be the fallback. `path` is safe by construction here:
+      // it only reaches this branch when isAppPath() has already accepted it.
+      redirect.searchParams.set("redirect_url", path);
+    }
     // A visitor holding no session must not be able to poison a shared cache
     // with a redirect that a signed-in visitor would then be served.
     return NextResponse.redirect(redirect, {
