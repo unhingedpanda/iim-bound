@@ -17,7 +17,23 @@
 -- create objects could shadow a function this one calls.
 
 -- Changing a function's return type is not something CREATE OR REPLACE can do.
+--
+-- Both argument orders are dropped, and that is not belt-and-braces: this
+-- project's hosted database has `(p_drill_key, p_on_day, p_seconds)` while
+-- every migration file declares `(p_on_day, p_drill_key, p_seconds)` — the
+-- hosted one was created by hand and never matched the repo. Dropping only the
+-- date/text/integer form would have left the hosted variant in place, and
+-- PostgREST resolving the app's named-argument call against two overloads
+-- fails as ambiguous. Deployment order does not save you here either: the
+-- migration is the thing that creates the second overload.
+--
+-- Postgres identifies a function by name plus argument *types*, not names, so
+-- these two drops are genuinely different functions. Dropped without a
+-- signature would take every overload of the name, which is what we want but
+-- is a blunt instrument to leave in a migration; naming both is explicit about
+-- what is being replaced and why.
 drop function if exists public.log_focus_session(date, text, integer);
+drop function if exists public.log_focus_session(text, date, integer);
 
 create or replace function public.log_focus_session(
   p_on_day date,
