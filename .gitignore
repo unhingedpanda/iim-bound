@@ -16,3 +16,5 @@ supabase/.branches
 supabase/.temp
 
 .impeccable
+.env*
+!.env.example

@@ -1,13 +1,13 @@
-# CAT Register
+# IIM Bound
 
-A daily register for CAT preparation. Drills with a timer behind each one, a mock log that works in
+A daily logbook for CAT preparation. Drills with a timer behind each one, a mock log that works in
 attempts and accuracy rather than a single percentile, a syllabus you can see the holes in, and an
 error log that separates *didn't know it* from *knew it and slipped*.
 
 Hosted for anyone who signs up. The source is public so you can read exactly what it does with your
 data, file issues, and send patches.
 
-**Live:** _add your Vercel URL here_
+**Live:** https://iimbound.vercel.app
 
 ## Why it exists
 
@@ -40,7 +40,7 @@ another's rows even if the API key leaks — the key is publishable by design.
 
 ```bash
 git clone <your-fork>
-cd cat-register
+cd iim-bound
 npm install
 cp .env.example .env.local   # fill in your Supabase URL and publishable key
 npm run dev
@@ -117,6 +117,13 @@ in most mocks and the one a plain notes app never makes you count.
 Issues and pull requests welcome. Please run `npm run check` before opening a PR. Keep the visual
 language as it is: heavy rules, one signal colour, flag red reserved strictly for a breached
 sectional floor.
+
+## A note on the name
+
+*IIM Bound* describes where its users are trying to get to. It is an independent project with no
+connection to the Indian Institutes of Management, and nothing here is official CAT material. The
+score-to-percentile curves are interpolated from publicly reported results and are a compass, not a
+result.
 
 ## Licence
 

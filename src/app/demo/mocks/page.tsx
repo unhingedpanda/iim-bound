@@ -3,7 +3,7 @@ import { daysBetween, todayISO } from "@/lib/dates";
 import { demoMocks } from "@/lib/demo";
 import { DEFAULTS } from "@/lib/plan";
 
-export const metadata = { title: "Mocks · Demo · CAT Register" };
+export const metadata = { title: "Mocks · Demo · IIM Bound" };
 
 export default function DemoMocksPage() {
   const today = todayISO();

@@ -16,9 +16,9 @@ const instrument = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "CAT Register",
+  title: "IIM Bound",
   description:
-    "An open-source daily register for CAT preparation: four drills a day, a mock log that names your weakest section, syllabus coverage and focus time.",
+    "A daily logbook for CAT preparation: drills with a timer, mocks scored in attempts and accuracy, syllabus coverage and an error log with causes.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

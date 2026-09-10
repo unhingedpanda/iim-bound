@@ -12,7 +12,7 @@ import { longDate } from "@/lib/dates";
 import { dailyTarget } from "@/lib/plan";
 import { currentUserId } from "@/lib/supabase/server";
 
-export const metadata = { title: "Settings · CAT Register" };
+export const metadata = { title: "Settings · IIM Bound" };
 
 const FIELD =
   "w-full border-0 border-b-2 border-line bg-transparent py-2 text-base text-ink outline-none focus:border-ink";

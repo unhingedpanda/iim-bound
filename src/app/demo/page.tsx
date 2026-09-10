@@ -4,9 +4,8 @@ import { demoDrillDefs, demoDrills, demoRun } from "@/lib/demo";
 import { DEFAULTS, phaseFor } from "@/lib/plan";
 
 export const metadata = {
-  title: "Demo · CAT Register",
-  description:
-    "A filled register, with sample data, so you can see what it does before signing up.",
+  title: "Demo · IIM Bound",
+  description: "A filled logbook, with sample data, so you can see what it does before signing up.",
 };
 
 export default function DemoPage() {

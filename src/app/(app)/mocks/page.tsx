@@ -3,7 +3,7 @@ import MocksView from "@/components/MocksView";
 import { daysLeft, getMocks, getProfile } from "@/lib/data";
 import { currentUserId } from "@/lib/supabase/server";
 
-export const metadata = { title: "Mocks · CAT Register" };
+export const metadata = { title: "Mocks · IIM Bound" };
 
 export default async function MocksPage() {
   const userId = await currentUserId();

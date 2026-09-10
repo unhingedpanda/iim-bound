@@ -2,7 +2,7 @@ import Link from "next/link";
 import LoginForm from "@/components/LoginForm";
 import { supabaseConfigured } from "@/lib/supabase/env";
 
-export const metadata = { title: "Sign in · CAT Register" };
+export const metadata = { title: "Sign in · IIM Bound" };
 
 export default async function LoginPage({
   searchParams,

@@ -32,7 +32,7 @@ export default function Landing() {
 
           <div className="min-w-0 self-end">
             <p className="max-w-[46ch] text-xl leading-snug text-ink-2 lg:text-2xl">
-              Most people fail CAT on consistency, not intelligence. This is the register that makes
+              Most people fail CAT on consistency, not intelligence. This is the logbook that makes
               both visible: what you did today, what you keep getting wrong, and which section is
               quietly costing you the call.
             </p>
@@ -41,10 +41,10 @@ export default function Landing() {
                 href="/login"
                 className="bg-signal px-6 py-4 text-lg font-semibold text-signal-ink"
               >
-                Start your register
+                Start your logbook
               </Link>
               <Link href="/demo" className="border-2 border-ink px-6 py-4 text-lg font-semibold">
-                See a filled register
+                See a filled logbook
               </Link>
             </div>
           </div>
@@ -54,11 +54,12 @@ export default function Landing() {
       {/* What a day looks like — the actual interface shape, not a mockup frame. */}
       <section className="rule-heavy mt-20 pt-6" aria-labelledby="day-h">
         <h2 id="day-h" className="display text-[clamp(30px,5vw,52px)]">
-          A day is four blocks
+          A day is {DEFAULT_DRILLS.length} blocks
         </h2>
         <p className="mt-3 max-w-[60ch] text-ink-2">
-          Each drill has a minute target. The bar fills from the timer, so a day you half-did looks
-          like a day you half-did.
+          Each drill has a minute target and the bar fills from the timer, so a day you half-did
+          looks like a day you half-did. These are the defaults — rename them, retime them, add your
+          own.
         </p>
 
         <ul className="mt-10 grid gap-5">
@@ -87,12 +88,12 @@ export default function Landing() {
         aria-labelledby="what-h"
       >
         <h2 id="what-h" className="sr-only">
-          What the register tracks
+          What it tracks
         </h2>
         {[
           {
-            title: "Mocks that answer back",
-            body: "Log percentiles and the register tells you which section is holding the overall down, and flags any section below the floor that ends candidatures.",
+            title: "Mocks scored the way CAT scores them",
+            body: "Log attempts and correct answers per section. Net score, accuracy and an estimated percentile come out of CAT 2025's own curves, so a past paper counts as much as a paid series.",
           },
           {
             title: "Syllabus you can see through",
@@ -100,7 +101,7 @@ export default function Landing() {
           },
           {
             title: "An error log with causes",
-            body: "Every mistake tagged concept, careless, timing or set selection — because three of those four are not fixed by studying more.",
+            body: "Every mistake tagged concept, careless, misread, timing, selection or missed-easy — because only the first of those six is fixed by studying more.",
           },
         ].map((card) => (
           <article key={card.title}>

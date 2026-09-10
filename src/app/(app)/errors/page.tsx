@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import ErrorsView, { type MistakeRow } from "@/components/ErrorsView";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
-export const metadata = { title: "Errors · CAT Register" };
+export const metadata = { title: "Errors · IIM Bound" };
 
 export default async function ErrorsPage() {
   const userId = await currentUserId();

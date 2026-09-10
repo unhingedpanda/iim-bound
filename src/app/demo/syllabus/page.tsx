@@ -1,7 +1,7 @@
 import SyllabusView from "@/components/SyllabusView";
 import { DEMO_TOPICS, demoConfidence } from "@/lib/demo";
 
-export const metadata = { title: "Syllabus · Demo · CAT Register" };
+export const metadata = { title: "Syllabus · Demo · IIM Bound" };
 
 export default function DemoSyllabusPage() {
   const confidence = new Map<number, number>(

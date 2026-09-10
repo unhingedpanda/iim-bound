@@ -14,7 +14,7 @@ import { addDays, daysBetween, longDate, todayISO, weekdayIndex } from "@/lib/da
 import { phaseFor } from "@/lib/plan";
 import { currentUserId } from "@/lib/supabase/server";
 
-export const metadata = { title: "Today · CAT Register" };
+export const metadata = { title: "Today · IIM Bound" };
 
 export default async function TodayPage() {
   const userId = await currentUserId();

@@ -28,7 +28,7 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
         Nothing here is saved and nothing here is editable — it is one made-up account so you can
         see the screens. Every drill, target and threshold becomes yours once you sign in.{" "}
         <Link href="/login" className="font-semibold text-ink underline underline-offset-4">
-          Start your own register
+          Start your own logbook
         </Link>
         .
       </p>

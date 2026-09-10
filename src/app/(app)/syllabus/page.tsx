@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import SyllabusView, { type Topic } from "@/components/SyllabusView";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
-export const metadata = { title: "Syllabus · CAT Register" };
+export const metadata = { title: "Syllabus · IIM Bound" };
 
 export default async function SyllabusPage() {
   const userId = await currentUserId();

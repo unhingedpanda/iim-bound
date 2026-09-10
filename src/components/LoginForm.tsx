@@ -32,7 +32,7 @@ export default function LoginForm({ next }: { next: string }) {
         <p className="display text-[clamp(28px,5vw,44px)]">Check your email</p>
         <p className="mt-3 text-ink-2">
           A sign-in link is on its way to {email}. It signs you in on this device and keeps your
-          register in sync everywhere else.
+          logbook in sync everywhere else.
         </p>
       </div>
     );
