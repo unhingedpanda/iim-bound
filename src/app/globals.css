@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Palette — bold editorial. Heavy ink, one saturated signal, flag red
+   reserved for a breached sectional floor and nothing else.
+   ------------------------------------------------------------------ */
+:root {
+  --paper: #fbfaf7;
+  --paper-2: #f1efe9;
+  --paper-3: #e6e3da;
+  --ink: #0d0d10;
+  --ink-2: #4a4a55;
+  --ink-3: #6f6f7d;
+  --line: #d9d5cb;
+  --signal: #1b36ff;
+  --signal-ink: #ffffff;
+  --flag: #d63a1e;
+  --good: #1a7f4b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0b0b0e;
+    --paper-2: #141419;
+    --paper-3: #1e1e26;
+    --ink: #f4f2ec;
+    --ink-2: #b3b1bd;
+    --ink-3: #8d8b99;
+    --line: #26262f;
+    --signal: #6d7dff;
+    --signal-ink: #07070a;
+    --flag: #ff6a4d;
+    --good: #4ad395;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #0b0b0e;
+  --paper-2: #141419;
+  --paper-3: #1e1e26;
+  --ink: #f4f2ec;
+  --ink-2: #b3b1bd;
+  --ink-3: #8d8b99;
+  --line: #26262f;
+  --signal: #6d7dff;
+  --signal-ink: #07070a;
+  --flag: #ff6a4d;
+  --good: #4ad395;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-signal: var(--signal);
+  --color-signal-ink: var(--signal-ink);
+  --color-flag: var(--flag);
+  --color-good: var(--good);
+
+  --font-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
+  --font-body: var(--font-instrument), "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Base resets go in the base layer so utility classes still win. Unlayered
+   rules beat every layered rule in Tailwind v4, which silently defeats
+   utilities like text-paper on a <button>. */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  input,
+  select,
+  textarea,
+  button {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* Display type: Archivo carries a width axis — the expanded cut is what
+   makes the big numerals read as a masthead rather than a UI label. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-stretch: 112%;
+  letter-spacing: -0.03em;
+  line-height: 0.86;
+  text-wrap: balance;
+}
+
+.rule-heavy {
+  border-top: 4px solid var(--ink);
+}
+.rule-light {
+  border-top: 1px solid var(--line);
+}
+
+:focus-visible {
+  outline: 3px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* Block meter: solid ink fill on a flat track, the shape the whole
+   interface is built from. No radius, no gradient, no shadow. */
+.meter {
+  display: block;
+  height: 14px;
+  background: var(--paper-3);
+  overflow: hidden;
+}
+.meter > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--ink);
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left center;
+}
+.meter[data-done="true"] > span {
+  background: var(--signal);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .meter > span {
+    transition: transform 0.25s ease;
+  }
+}
+
+::selection {
+  background: var(--signal);
+  color: var(--signal-ink);
+}
+
+/* Digits line up in columns everywhere, so they are always tabular. */
+.display,
+table,
+dd,
+.meter + * {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------
+   Motion. One entrance per screen and one drawn line, nothing else.
+   Every animation ends at the resting state, so the page is correct
+   with motion disabled and correct in a still frame.
+   ------------------------------------------------------------------ */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+
+  main > section {
+    animation: rise 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+  main > section:nth-child(2) {
+    animation-delay: 0.05s;
+  }
+  main > section:nth-child(3) {
+    animation-delay: 0.1s;
+  }
+  main > section:nth-child(n + 4) {
+    animation-delay: 0.14s;
+  }
+
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 2000;
+    }
+  }
+
+  .trace {
+    stroke-dasharray: 2000;
+    animation: draw 1.1s cubic-bezier(0.3, 0.8, 0.3, 1) 0.15s both;
+  }
+}
+
+/* Buttons take a press. Cheap, and the whole interface feels answered. */
+button:not(:disabled),
+a {
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+button:not(:disabled):active {
+  transform: translateY(1px);
+}

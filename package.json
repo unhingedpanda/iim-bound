@@ -1,0 +1,33 @@
+{
+  "name": "cat-register",
+  "version": "0.1.0",
+  "private": false,
+  "license": "MIT",
+  "description": "An open-source daily register for CAT preparation: drills, mocks, syllabus coverage and focus time.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "biome check src proxy.ts next.config.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "biome check --write src proxy.ts next.config.ts",
+    "check": "npm run lint && npm run typecheck && npm test",
+    "test": "node --experimental-strip-types src/lib/cat.test.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.116.0",
+    "next": "16.3.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  }
+}
