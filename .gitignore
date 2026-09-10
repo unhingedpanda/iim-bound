@@ -21,9 +21,12 @@ playwright-report
 
 # Agent skill bundles, vendored by `clerk init` and `npx skills add`. Tooling,
 # not source: they are large, and they carry their own template projects whose
-# TypeScript would otherwise be typechecked as part of this app.
+# TypeScript would otherwise be typechecked as part of this app. The lockfile
+# that pins them goes with them.
 agent/
 .agents/
+.claude/
+skills-lock.json
 
 .impeccable
 .env*

@@ -29,7 +29,8 @@ The register makes each of those a number on a screen instead of a feeling.
 | --- | --- |
 | Framework | Next.js 16 (App Router, React 19, Server Actions) |
 | Styling | Tailwind CSS v4, CSS-first theme tokens |
-| Data & auth | Supabase Postgres with row-level security, email magic-link sign-in |
+| Data | Supabase Postgres with row-level security |
+| Auth | Clerk — email or username with a password, plus Google |
 | Lint & format | Biome |
 | Hosting | Vercel |
 
@@ -42,11 +43,25 @@ another's rows even if the API key leaks — the key is publishable by design.
 git clone <your-fork>
 cd iim-bound
 npm install
-cp .env.example .env.local   # fill in your Supabase URL and publishable key
-npm run dev
+cp .env.example .env.local
 ```
 
-You need a Supabase project. Create one, then apply the schema:
+Then fill in four values in `.env.local`. Two are Supabase's:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_…
+```
+
+and two are Clerk's, which `npx clerk env pull` writes for you if you have the CLI linked to an
+application:
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_…
+CLERK_SECRET_KEY=sk_test_…
+```
+
+Then create the Supabase project's schema:
 
 ```bash
 supabase link --project-ref <your-ref>
@@ -62,15 +77,24 @@ Management API instead, using the CLI's own access token and recording it in
 `schema_migrations` exactly as the CLI would:
 
 ```bash
-npm run db:migrate 20260910050000
+npm run db:migrate 20260910070000
 ```
 
 For a local stack instead, `npm run test:up` starts one from `supabase/config.toml`. Its ports are
 in the `553xx` range rather than the Supabase defaults, so this project can run on the same machine
 as other Supabase projects without fighting over `54321`.
 
-For magic links to work locally, add `http://localhost:3000/auth/callback` to
-**Authentication → URL configuration → Redirect URLs** in the Supabase dashboard.
+### Connecting the two
+
+Clerk has to be introduced to Supabase once, in the Clerk dashboard under
+**Configure → Integrations → Supabase**: paste the Supabase project URL and choose the
+`authenticated` role. That connection is what puts `role: authenticated` and `sub: user_…` on the
+session token; without it Supabase rejects the token outright rather than returning no rows.
+
+`supabase/config.toml` carries the matching switch for a local stack — a
+`[auth.third_party.clerk]` block naming the Clerk instance's frontend API host. Point it at your
+own instance's host, bare (no scheme, no path).
+
 
 ### Scripts
 
@@ -89,18 +113,27 @@ npm run test:down  # stop it
 
 ## Deploying
 
-Push to GitHub, import the repo in Vercel, and set two environment variables:
+Push to GitHub, import the repo in Vercel, and set four environment variables:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
 
-Then add `https://<your-domain>/auth/callback` to the Supabase redirect URL list. No other
-configuration is needed: the app itself holds no server-side secret, and the only database function
-it calls (`log_focus_session`) runs as the caller under row-level security.
+Use the **live** Clerk keys for Production and the test keys for Preview and Development, so a
+preview deployment cannot mint sessions against real users. Then add the production domain to
+Clerk's **Domains**, and register it in the Supabase integration's allowed origins.
 
-Only the two `NEXT_PUBLIC_*` variables are needed, and both are inlined at build time — a build made
-with one project's values will keep talking to that project even if the environment changes
-afterwards, so set them before `npm run build`.
+The three `NEXT_PUBLIC_*` variables are inlined at build time — a build made with one project's
+values will keep talking to that project even if the environment changes afterwards, so set them
+before `npm run build`. `CLERK_SECRET_KEY` is read at runtime and stays server-side; the app holds
+no other secret.
+
+If Clerk's production frontend API is proxied through this app (`https://<domain>/__clerk`), that
+path has to reach Clerk without the auth gate running over it — `src/proxy.ts` passes it straight
+through for exactly that reason. A `clerk.<domain>` CNAME to `frontend-api.clerk.services` avoids
+the proxy entirely and is the better long-term choice.
+
 
 ## The prep model
 
@@ -150,7 +183,7 @@ Four modules carry the ideas, and everything else is presentation:
 | `src/lib/server/writes.ts` | The only path to Postgres: a read that falls back, a write that throws a readable error |
 | `src/lib/routes.ts` | The list of sign-in-walled routes, read by both the proxy and the nav |
 
-Three rules the rest of the code follows:
+Four rules the rest of the code follows:
 
 - **One meaning per number.** Today's minutes, the day's target, the run grid and the streak all read
   the same set of drills, so the figures on one screen cannot contradict each other.
@@ -159,6 +192,29 @@ Three rules the rest of the code follows:
 - **Nothing may be written to an arbitrary day.** `acceptDay` allows the client's own calendar within
   a day of the server's, and the `log_focus_session` function re-checks the same window itself,
   because it is reachable straight through the API.
+- **Identity is `auth.jwt() ->> 'sub'`, never `auth.uid()`.** Clerk user ids look like `user_2abc…`,
+  and `auth.uid()` is declared `returns uuid`. The cast fails *silently* — no exception, just NULL —
+  so `user_id = auth.uid()` matches nothing and every signed-in user sees an empty app with nothing
+  in the logs. The user columns are `text` for the same reason, and `public.current_user_id()` is the
+  one place the claim is read. If you add a table, copy a policy, or write a function that scopes by
+  user, it reads that helper.
+
+### The identity bridge
+
+Clerk signs the session; Postgres decides what it may see. The join between them is the session
+token, which `src/lib/supabase/server.ts` asks Clerk for on every request and hands to Supabase as a
+bearer token. Supabase verifies it against Clerk's published keys — the third-party auth connection
+above — and exposes the claims to SQL.
+
+That means there is no user row to mirror and no sync job to fall behind: `profiles.id` is the Clerk
+`sub` itself, written on first save. The one thing it costs is that `auth.uid()` is unusable, which
+is the rule above.
+
+`accessToken` is a callback, not a value, because Clerk rotates session tokens; supabase-js calls it
+when it needs one and again after a 401. The client deliberately does not use `@supabase/ssr`: that
+package exists to keep Supabase's own session in cookies, and there is no Supabase session any more.
+Two things would have believed they were the source of truth.
+
 
 ### The mark
 
@@ -183,19 +239,28 @@ then drives both through their real interfaces:
 - the app's own query layer and Server Actions, called directly against real PostgREST, real
   row-level security and the real SQL function — one fresh account per test, so isolation is enforced
   by the database rather than by test discipline
-- HTTP against the running server, for the middleware, the auth routes and the server-rendered HTML
+- HTTP against the running server, for the middleware, the gate on each walled route, and the
+  server-rendered HTML
 
-Only two things are stood in for, both framework plumbing rather than behaviour: `next/headers`, and
-`next/cache`'s `refresh()`. They live in `tests/e2e/stubs/`.
+A test account is a Clerk id plus a session token the harness signs with Supabase's own JWT secret,
+which is the same token Supabase would have received had a browser signed in. That is deliberate:
+the suite exercises Postgres, not Clerk, and making it depend on a live auth provider would make it
+slow, flaky, and unable to run offline. Clerk's own behaviour is covered by the browser suite
+instead, where a real sign-in happens.
+
+Only three things are stood in for, all framework plumbing rather than behaviour: `next/headers`,
+`next/cache`'s `refresh()`, and Clerk's `auth()`/`currentUser()`. They live in `tests/e2e/stubs/`.
 
 `npm run test:browser` drives a real Chromium against that same build and the same database, for the
 things an HTTP response cannot show: where two rules actually land on the page, whether a sticky
-header stays opaque, whether a rating survives a reload, whether the tabs are thumb-sized on a phone.
-It is not a second copy of the suite above — the two check different questions, and a pixel scan
-catches what markup assertions cannot.
+header stays opaque, whether a rating survives a reload, whether the tabs are thumb-sized on a phone,
+and whether a signed-in visitor actually reaches each walled route. It signs in through Clerk's real
+form using a testing token, so the auth path is end to end rather than stubbed.
 
-Both suites share `tests/e2e/harness.sh`, so they are guaranteed to be looking at one build rather
-than two.
+It is not a second copy of the suite above — the two check different questions, and a pixel scan
+catches what markup assertions cannot. Both share `tests/e2e/harness.sh`, so they are guaranteed to be
+looking at one build rather than two.
+
 
 ```bash
 npm run test:e2e       # ~1 minute; leaves the stack running, `npm run test:down` to stop it
@@ -203,11 +268,17 @@ npm run test:browser   # needs Chromium: `npx playwright install chromium`
 npm run test:all       # check + e2e + browser
 ```
 
-For looking at the app by hand there is `node scripts/demo-seed.mjs`: it makes a local account
-(`demo@iimbound.local` / `demo-password-123`) with three weeks of plausible history, weighted so the
-streak is real and the run grid has something to say. It refuses to run against anything that is not
-127.0.0.1, and writes through PostgREST with the user's own token, so row-level security applies to
-it exactly as it applies to the browser.
+For looking at the app by hand there is `node scripts/demo-seed.mjs`. Clerk owns the account, so it
+cannot create one — it seeds three weeks of plausible history onto a Clerk user you already have,
+found by id, email or username, weighted so the streak is real and the run grid has something to say:
+
+```bash
+node scripts/demo-seed.mjs                # the only Clerk user on the dev instance
+node scripts/demo-seed.mjs you@example.com
+```
+
+It refuses to run against anything that is not 127.0.0.1, and writes through PostgREST with that
+user's own token, so row-level security applies to it exactly as it applies to the browser.
 
 ## Contributing
 
