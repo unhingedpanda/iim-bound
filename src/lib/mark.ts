@@ -43,6 +43,20 @@ export const MARK_COLORS = {
   signal: "#1b36ff",
 } as const;
 
+/**
+ * How the mark is painted, which depends on the job rather than on the theme.
+ *
+ * - `tile` is the app icon. Dark tile, paper bars, blue step, identical in every
+ *   context — because that is what a favicon is: a fixed asset seen against
+ *   browser chrome the page does not control.
+ * - `mark` is the logo sitting in the app's own masthead. No tile, bars in the
+ *   current text colour, the step still blue. This is what stops the logo
+ *   flipping polarity in dark mode: themed naively, the tiled version becomes a
+ *   cream block with black bars, which is a different logo from the one in the
+ *   tab — and being the same logo everywhere is the entire point of having one.
+ */
+export type MarkVariant = "tile" | "mark";
+
 /** The mark as standalone SVG markup, for files that are not React. */
 export function markSvg({
   size = MARK_VIEWBOX,

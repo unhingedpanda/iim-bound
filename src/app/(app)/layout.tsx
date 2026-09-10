@@ -26,7 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
           <div className="flex items-center gap-5">
             <Link href="/today" className="flex items-center gap-2.5">
-              <Mark />
+              <Mark size={22} />
               <span className="display text-xl">{SITE.name}</span>
             </Link>
             <DesktopNav />

@@ -9,7 +9,7 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
       <header className="border-b-4 border-ink pb-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/" className="flex items-center gap-2.5">
-            <Mark size={24} />
+            <Mark size={22} />
             <span className="display text-2xl">{SITE.name}</span>
           </Link>
           <div className="flex items-center gap-4">
