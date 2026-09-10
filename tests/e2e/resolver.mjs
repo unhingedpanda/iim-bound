@@ -8,15 +8,21 @@
  *     Next.js compiler, and without it the app's modules cannot be imported
  *     directly.
  *
- *  2. Redirect the two framework imports that only make sense inside a request:
+ *  2. Redirect the framework imports that only make sense inside a request:
  *     `next/headers`, which @supabase/ssr uses to read and write the session
- *     cookie, and `next/cache`, whose refresh() re-renders a client router
- *     that does not exist here. Both are plumbing, not application logic, and
- *     both are replaced with a faithful stand-in rather than a mock of the
- *     thing under test — the queries, the actions and the SQL all stay real.
+ *     cookie; `next/cache`, whose refresh() re-renders a client router that does
+ *     not exist here; and `@clerk/nextjs/server`, which reads a session off a
+ *     request. All are plumbing, not application logic, and each is replaced
+ *     with a faithful stand-in rather than a mock of the thing under test — the
+ *     queries, the actions, the SQL and the JWT verification all stay real.
  *
- * The cookie store is kept on globalThis because the resolver and the test
- * file are separate module graphs that must agree on it.
+ * Since identity moved to Clerk, the Supabase client authenticates with a token
+ * rather than a cookie, so the stub supplies a genuinely signed token instead of
+ * a cookie jar. PostgREST verifies it, and `auth.jwt() ->> 'sub'` returns the
+ * Clerk id exactly as it does in the browser.
+ *
+ * The session is kept on globalThis because the resolver and the test file are
+ * separate module graphs that must agree on it.
  */
 
 import { existsSync } from "node:fs";
@@ -29,6 +35,9 @@ const SRC = path.join(ROOT, "src");
 const STUBS = {
   "next/headers": pathToFileURL(path.join(ROOT, "tests/e2e/stubs/headers.mjs")).href,
   "next/cache": pathToFileURL(path.join(ROOT, "tests/e2e/stubs/cache.mjs")).href,
+  "@clerk/nextjs/server": pathToFileURL(
+    path.join(ROOT, "tests/e2e/stubs/clerk-server.mjs"),
+  ).href,
 };
 
 /**

@@ -7,14 +7,13 @@
  * can prove it is fixed.
  */
 
-import { expect, paintedRows, settle, test } from "./fixtures";
+import { anonTest, expect, paintedRows, settle, test } from "./fixtures";
 
 const APP_PAGES = ["/today", "/mocks", "/syllabus", "/errors", "/settings"];
 
 test.describe("the rule at the top of a page", () => {
   for (const path of APP_PAGES) {
-    test(`${path} shows one rule at the header seam, not two`, async ({ page, session }) => {
-      void session;
+    test(`${path} shows one rule at the header seam, not two`, async ({ page }) => {
       await page.goto(path);
       await settle(page);
 
@@ -111,8 +110,7 @@ test.describe("the demo pages", () => {
 });
 
 test.describe("the sticky header", () => {
-  test("stays pinned, and stays opaque, while the page scrolls", async ({ page, session }) => {
-    void session;
+  test("stays pinned, and stays opaque, while the page scrolls", async ({ page }) => {
     await page.goto("/today");
 
     const header = page.locator("header");
@@ -138,8 +136,7 @@ test.describe("rating a syllabus topic", () => {
   const firstRow = (page: import("@playwright/test").Page) =>
     page.locator("main ul li").first();
 
-  test("offers three ratings and no mystery fourth", async ({ page, session }) => {
-    void session;
+  test("offers three ratings and no mystery fourth", async ({ page }) => {
     await page.goto("/syllabus");
     await settle(page);
 
@@ -152,8 +149,7 @@ test.describe("rating a syllabus topic", () => {
     await expect(page.getByRole("button", { name: "Automatic" })).toHaveCount(0);
   });
 
-  test("an unrated topic reads as untouched, and the count says so", async ({ page, session }) => {
-    void session;
+  test("an unrated topic reads as untouched, and the count says so", async ({ page }) => {
     await page.goto("/syllabus");
     await settle(page);
 
@@ -164,8 +160,7 @@ test.describe("rating a syllabus topic", () => {
     expect(headline.replace(/\s+/g, " ")).toContain("0/");
   });
 
-  test("rating a topic survives a reload, and the count follows", async ({ page, session }) => {
-    void session;
+  test("rating a topic survives a reload, and the count follows", async ({ page }) => {
     await page.goto("/syllabus");
     await settle(page);
 
@@ -189,5 +184,103 @@ test.describe("rating a syllabus topic", () => {
       "true",
     );
     await expect(page.locator("main h1")).toContainText("1/");
+  });
+});
+
+test.describe("signing in", () => {
+  anonTest("offers a username field and a password field", async ({ page }) => {
+    // The AnonFixture above leaves this context signed out. This is the shape
+    // the migration was asked for: one field that takes an email OR a username,
+    // plus a password — not an email link you have to go and fetch.
+    await page.goto("/login");
+
+    // Clerk's component takes one field for either identifier, plus a password.
+    // The placeholder is asserted as an attribute because it is not text
+    // content — getByText cannot see it, which cost a run to learn.
+    const identifier = page.locator('input[name="identifier"]');
+    await expect(identifier).toBeVisible({ timeout: 20_000 });
+    await expect(identifier).toHaveAttribute("placeholder", /email or username/i);
+    await expect(page.locator('input[name="password"]')).toBeVisible();
+  });
+
+  anonTest("offers a password, not only an emailed link", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.locator('input[name="password"]')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("button", { name: /continue/i }).first()).toBeVisible();
+  });
+});
+
+test.describe("the run grid", () => {
+  test("gives the exam day a square of its own", async ({ page }) => {
+    // The bug this pins: the grid was built from an exclusive day count, so its
+    // last square was the day before the exam and the exam itself never
+    // appeared. Moved here from the HTTP suite, which can no longer reach an
+    // authenticated page.
+    await page.goto("/today");
+
+    const titles = await page.locator(".run-square").evaluateAll((nodes) =>
+      nodes.map((n) => n.getAttribute("title") ?? ""),
+    );
+    const days = titles
+      .map((t) => /^(\d{4}-\d{2}-\d{2})/.exec(t)?.[1])
+      .filter((d): d is string => Boolean(d));
+
+    expect(days.length, `expected a long run, saw ${days.length}`).toBeGreaterThan(60);
+    expect(days.at(-1), "the exam date is the last square").toBe("2026-11-29");
+
+    // Inclusive from the first day: no gaps and no duplicates.
+    expect(new Set(days).size, "no square is drawn twice").toBe(days.length);
+    expect(days, "the squares run in order").toEqual([...days].sort());
+  });
+
+  test("gives every square the hook its motion hangs off", async ({ page }) => {
+    // A square's shade is driven by --fill rather than a baked background,
+    // which is what lets a day that changes animate instead of jumping. If the
+    // property stops rendering, that transition quietly becomes decoration.
+    await page.goto("/today");
+
+    const missing = await page.locator(".run-square").evaluateAll((nodes) =>
+      nodes
+        .map((n, i) => ({ i, fill: (n as HTMLElement).style.getPropertyValue("--fill") }))
+        .filter((s) => !s.fill)
+        .map((s) => s.i),
+    );
+
+    const total = await page.locator(".run-square").count();
+    expect(total).toBeGreaterThan(60);
+    expect(missing, "every square must carry --fill as an inline custom property").toEqual([]);
+  });
+
+  test("counts today's minutes against the drill targets on the same page", async ({ page }) => {
+    // A brand-new account is seeded with four default drills summing to 145
+    // minutes, which is the denominator on the header figure. Reading both from
+    // one render is the point: they used to be computed from different sets.
+    await page.goto("/today");
+
+    const minutes = await page.locator("main").innerText();
+    expect(minutes, "the figure is on the page").toContain("Minutes today");
+    expect(minutes, "against the target its own drills add up to").toMatch(/\/\s*145/);
+  });
+});
+
+test.describe("a signed-in visitor", () => {
+  // These two used to live in the HTTP suite, reached with a hand-built Supabase
+  // session cookie. Nothing builds one any more — a session is Clerk's, and
+  // completing Clerk's sign-in needs a browser — so they live here, where the
+  // session is real and the check is therefore stronger than the one it
+  // replaced.
+  for (const path of ["/today", "/mocks", "/syllabus", "/errors", "/settings"]) {
+    test(`reaches ${path}`, async ({ page }) => {
+      const response = await page.goto(path);
+      expect(response?.status(), `${path} should render`).toBe(200);
+      await expect(page.locator("header")).toContainText("IIM Bound");
+    });
+  }
+
+  test("is sent on to Today from the entry pages", async ({ page }) => {
+    for (const path of ["/", "/login"]) {
+      await page.goto(path);
+      await expect(page, `${path} should not be the landing place`).toHaveURL(/\/today$/);
+    }
   });
 });

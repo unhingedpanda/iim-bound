@@ -10,8 +10,7 @@
 import { expect, test } from "./fixtures";
 
 test.describe("on a phone", () => {
-  test("the desktop nav is hidden and the tab bar is not", async ({ page, session }) => {
-    void session;
+  test("the desktop nav is hidden and the tab bar is not", async ({ page }) => {
     await page.goto("/today");
 
     // DesktopNav is `hidden sm:flex`; the mobile bar is `sm:hidden`. If either
@@ -23,8 +22,7 @@ test.describe("on a phone", () => {
     await expect(tabBar).toBeVisible();
   });
 
-  test("every tab is a comfortable thumb target", async ({ page, session }) => {
-    void session;
+  test("every tab is a comfortable thumb target", async ({ page }) => {
     await page.goto("/today");
 
     const tabBar = page.getByRole("navigation", { name: "Sections" });
@@ -42,11 +40,7 @@ test.describe("on a phone", () => {
     }
   });
 
-  test("the tab bar sits at the bottom edge and the page scrolls clear of it", async ({
-    page,
-    session,
-  }) => {
-    void session;
+  test("the tab bar sits at the bottom edge and the page scrolls clear of it", async ({ page }) => {
     await page.goto("/today");
 
     const viewport = page.viewportSize();
@@ -71,8 +65,7 @@ test.describe("on a phone", () => {
     );
   });
 
-  test("the active tab is the current page", async ({ page, session }) => {
-    void session;
+  test("the active tab is the current page", async ({ page }) => {
     await page.goto("/syllabus");
 
     const active = page.getByRole("navigation", { name: "Sections" }).locator('[aria-current="page"]');

@@ -25,6 +25,8 @@ const PORT = Number(process.env.TEST_APP_PORT ?? 3100);
 
 export default defineConfig({
   testDir: "./tests/browser",
+  // Mints Clerk's testing token once per run; see the file for why.
+  globalSetup: "./tests/browser/global-setup.ts",
   // The stack, the build and the migrations are the harness's job; this suite
   // only drives a browser. Serial because each spec writes to one shared
   // database, and a parallel worker would see another spec's rows.
@@ -40,7 +42,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
 
   use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
+    baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

@@ -47,27 +47,11 @@ describe("route protection", () => {
     assert.match(response.headers.get("cache-control") ?? "", /no-store/);
   });
 
-  it("admits a signed-in visitor to every gated page", async () => {
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
-
-    for (const path of gated) {
-      const { response, body } = await request(path, { cookies });
-      assert.equal(response.status, 200, `${path} should render, got ${response.status}`);
-      assert.ok(body.includes("IIM Bound"), `${path} should render the app shell`);
-    }
-  });
-
-  it("keeps a signed-in visitor off the entry pages", async () => {
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
-
-    for (const path of ["/", "/login"]) {
-      const { response, location } = await request(path, { cookies });
-      assert.equal(response.status, 307, `${path} should redirect for a signed-in visitor`);
-      assert.ok(location?.endsWith("/today"), `${path} → ${location}`);
-    }
-  });
+  // "admits a signed-in visitor" and "keeps one off the entry pages" used to
+  // live here, reached with a hand-built Supabase session cookie. Nothing builds
+  // one any more: a session is Clerk's, and an HTTP-only client cannot complete
+  // Clerk's sign-in. Both assertions moved to tests/browser/layout.spec.ts,
+  // where a real signed-in browser is available and the check is stronger.
 
   it("leaves the public pages public", async () => {
     for (const path of ["/", "/login", "/demo", "/demo/mocks", "/demo/syllabus", "/demo/errors"]) {
@@ -76,121 +60,71 @@ describe("route protection", () => {
     }
   });
 
-  it("treats a wrong session cookie as signed out", async () => {
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
-    const [name] = Object.keys(cookies);
-
-    const { response, location } = await request("/today", { cookies: { [name]: "garbage" } });
-    assert.equal(response.status, 307);
-    assert.ok(location?.startsWith("/login"));
-  });
 });
 
-describe("the run grid", () => {
-  it("gives the exam day a square of its own", async () => {
-    // The bug: the grid was built from an exclusive day count, so its last
-    // square was the day before the exam and the exam itself never appeared.
-    // Every square carries its own date in a title, which is what is read here.
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
+// The run grid used to be asserted here, against /today's server-rendered HTML.
+// Fetching that page needs a real Clerk session now, which an HTTP client cannot
+// obtain, so the same assertions live in tests/browser/layout.spec.ts where a
+// signed-in browser already is — including the two that cost real bugs to find:
+// the exam day owning a square, and every square carrying the --fill the motion
+// hangs off.
 
-    const { response, body } = await request("/today", { cookies });
+describe("sign-in", () => {
+  it("serves Clerk's component, not a home-made email form", async () => {
+    const { response, body } = await request("/login");
     assert.equal(response.status, 200);
+    // Clerk's publishable key is what mounts its client; if it stops appearing,
+    // the form is gone and the page is a shell.
+    assert.match(body, /data-clerk-publishable-key/, "Clerk's key should be on the page");
+    assert.match(body, /clerk-js-script/, "and its client script");
+  });
 
-    const days = [...body.matchAll(/title="(\d{4}-\d{2}-\d{2}) — \d+ of \d+"/g)].map((m) => m[1]);
-    assert.ok(days.length > 60, `expected a long run, saw ${days.length} squares`);
-
-    const examDate = "2026-11-29";
-    assert.equal(days[days.length - 1], examDate, "the exam date is the last square");
-    assert.ok(
-      body.includes(`One square a day to Sunday, 29 November`),
-      "and the copy agrees with the grid",
+  it("routes Clerk at the app's own sign-in screen", async () => {
+    // The form itself is NOT in this HTML: Clerk's component bails out to
+    // client-side rendering, so the fields only exist after its client mounts —
+    // which is why the field-level assertions live in the browser suite. What
+    // the server does decide is where Clerk sends people, and that is checked
+    // here from the RSC payload.
+    const { body } = await request("/login");
+    assert.match(body, /\"signInUrl\":\"\/login\"/, "sign-in should stay on our route");
+    assert.match(body, /\"signUpUrl\":\"\/login\"/, "and so should sign-up");
+    assert.match(
+      body,
+      /\"signInFallbackRedirectUrl\":\"\/today\"/,
+      "a finished sign-in should land in the logbook, not the marketing page",
     );
-
-    // Inclusive from the first day of the run: no gaps and no duplicates.
-    const unique = new Set(days);
-    assert.equal(unique.size, days.length, "no square is drawn twice");
-    const sorted = [...unique].sort();
-    assert.deepEqual(days, sorted, "the squares run in order");
   });
 
-  it("counts today's minutes from the same drills the target is built from", async () => {
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
-    const { body } = await request("/today", { cookies });
-
-    // A brand-new account is seeded with the four default drills, whose
-    // targets sum to 145 minutes — the denominator on the header figure.
-    assert.ok(body.includes("Minutes today"), "the figure is on the page");
-    assert.ok(body.includes("/145"), "against the target its own drills add up to");
-    assert.ok(body.includes("All 4"), "and all four are on the board");
-  });
-
-  it("gives every square the hook its motion hangs off", async () => {
-    // A square's shade is driven by --fill rather than a baked background,
-    // which is what lets a day that changes animate instead of jumping. If the
-    // class or the property stops rendering, that transition silently becomes
-    // decoration that does nothing.
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
-    const { body } = await request("/today", { cookies });
-
-    const squares = [...body.matchAll(/class="run-square[^"]*"[^>]*style="([^"]*)"/g)];
-    assert.equal(squares.length, 80, "every day of the default run is a square");
-    for (const [, style] of squares) {
-      assert.ok(style.includes("--fill:"), `a square is missing --fill: ${style}`);
-    }
-  });
-});
-
-describe("auth routes", () => {
-  it("reports a missing code instead of failing", async () => {
-    const { response, location } = await request("/auth/callback");
-    assert.equal(response.status, 307);
-    assert.ok(location?.includes("error=missing_code"), location);
-  });
-
-  it("reports a bad code instead of failing", async () => {
-    const { response, location } = await request("/auth/callback?code=not-a-real-code");
-    assert.equal(response.status, 307);
-    assert.ok(location?.includes("error=link_expired"), location);
-  });
-
-  it("refuses to bounce a browser off-site", async () => {
-    // `next=//evil.com` is a protocol-relative URL: `${origin}${next}` would
-    // have landed the visitor on another host with a real magic link as bait.
-    for (const hostile of ["//evil.com/x", "https://evil.com", "/\\evil.com", "//evil.com"]) {
-      const { response, location } = await request(
-        `/auth/callback?code=x&next=${encodeURIComponent(hostile)}`,
-      );
-      assert.equal(response.status, 307);
-      // Next echoes the origin it was asked for, which may be spelled
-      // "localhost" or "127.0.0.1" — what matters is that it is this machine
-      // and this port, never an outside host.
+  it("keeps a hostile next out of the redirect, wherever it is consumed", async () => {
+    // `next=//evil.com` is a protocol-relative URL: `${origin}${next}` lands the
+    // visitor on another host with a real sign-in link as the bait. This test
+    // used to point at /auth/callback, which no longer exists — but the rule it
+    // was protecting still does, in safeNext() and in the proxy, so it is
+    // asserted against the surfaces that consume the parameter today.
+    const hostile = ["//evil.com/x", "https://evil.com", "/\\evil.com", "//evil.com"];
+    for (const value of hostile) {
+      const { location } = await request(`/today?next=${encodeURIComponent(value)}`);
       const target = new URL(location, APP_URL);
-      assert.ok(
-        ["localhost", "127.0.0.1"].includes(target.hostname),
-        `${hostile} resolved to another host: ${location}`,
+      assert.equal(target.hostname, new URL(APP_URL).hostname, `${value} changed host`);
+      assert.equal(target.port, new URL(APP_URL).port, `${value} left the app's port`);
+      assert.equal(target.pathname, "/login", `${value} did not land on sign-in`);
+      // The proxy owns this parameter and only ever writes the path it is
+      // gating, so a hostile value cannot survive into the redirect.
+      assert.equal(
+        target.searchParams.get("next"),
+        "/today",
+        `${value} influenced the next parameter`,
       );
-      assert.equal(target.port, new URL(APP_URL).port, `${hostile} left the app's port`);
-      // And it must land on a real route, not on a URL that merely looks local.
-      assert.equal(new URL(location, APP_URL).pathname, "/login");
     }
   });
 
-  it("still honours an on-site next", async () => {
-    const { location } = await request("/auth/callback?code=x&next=%2Fmocks");
-    assert.equal(new URL(location, APP_URL).pathname, "/login", "a bad code goes to sign-in");
-  });
-
-  it("signs out only on POST, and returns to the landing page", async () => {
-    const get = await request("/auth/signout");
-    assert.equal(get.response.status, 405, "a GET must not sign anyone out");
-
-    const post = await fetch(`${APP_URL}/auth/signout`, { method: "POST", redirect: "manual" });
-    assert.equal(post.status, 303);
-    assert.equal(new URL(post.headers.get("location"), APP_URL).pathname, "/");
+  it("signs out through Clerk's page, not a GET that signs you out", async () => {
+    // The old route was a POST form to /auth/signout, which meant a prefetch or
+    // a back button could end a session as a side effect of a page load. Clerk's
+    // page asks first.
+    const { response, body } = await request("/signout");
+    assert.equal(response.status, 200);
+    assert.match(body, /Signed out/i);
   });
 });
 

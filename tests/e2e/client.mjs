@@ -1,57 +1,60 @@
 /**
- * Making real accounts, so the app code under test can be the real app code.
+ * Identities for the e2e suite, now that Clerk owns them.
  *
- * Every test gets its own user. That matters twice over: the tables are
- * RLS-protected per user, so isolation is enforced by the database rather than
- * by test hygiene, and a test that accidentally reads someone else's row fails
- * instead of quietly passing.
+ * Two things changed with the migration and both are load-bearing:
  *
- * The cookie builder is the one piece of the framework this file reproduces.
- * @supabase/ssr stores a session as `<storageKey>` holding
- * `base64-` + base64url(JSON), split into `.0`, `.1` … chunks past ~3KB. Ten
- * lines here buys HTTP-level tests that sign in exactly as the browser does,
- * which is worth more than the alternative of testing the proxy with a fake
- * cookie the real stack would reject.
+ *  - A user id is a Clerk id (`user_…`), not a uuid. The schema's user columns
+ *    are text for exactly this reason.
+ *  - Supabase is reached with a *token*, not a cookie. So instead of building
+ *    @supabase/ssr's cookie format by hand, this hands out a real JWT signed
+ *    with the local stack's secret, carrying the same claims Clerk's template
+ *    does — see scripts/local-token.mjs. PostgREST verifies the signature, so
+ *    what is tested is the path that ships: `auth.jwt() ->> 'sub'` resolves,
+ *    and the row-level policies apply.
+ *
+ * Accounts are still per-test. There is nothing in Postgres to create — Clerk
+ * owns the user — so a "new user" is a fresh id, and isolation is enforced by
+ * the database rather than by test hygiene.
  */
 
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { localToken } from "../../scripts/local-token.mjs";
 import { API_URL, APP_URL, PUBLISHABLE_KEY, SERVICE_KEY } from "./stack.mjs";
+
+export const JWT_SECRET = process.env.SUPABASE_TEST_JWT_SECRET ?? "";
+if (!JWT_SECRET) {
+  throw new Error(
+    "SUPABASE_TEST_JWT_SECRET is not set. tests/e2e/harness.sh exports it from `supabase status`.",
+  );
+}
 
 export const admin = createClient(API_URL, SERVICE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
+export function tokenFor(userId) {
+  return localToken(userId, JWT_SECRET);
+}
+
 let counter = 0;
 
-/** A fresh confirmed account, plus a session for it. */
+/**
+ * A fresh signed-in user.
+ *
+ * `db` is a client scoped to that identity, the way PostgREST sees it, so a
+ * query here is subject to the same policies a browser request is.
+ */
 export async function newUser() {
   counter += 1;
-  const email = `e2e-${Date.now()}-${counter}@example.com`;
-  const password = "test-password-123";
-
-  const { data, error } = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-  });
-  if (error) throw new Error(`createUser failed: ${error.message}`);
-
-  const anon = createClient(API_URL, PUBLISHABLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: signedIn, error: signInError } = await anon.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (signInError) throw new Error(`signIn failed: ${signInError.message}`);
+  const id = `user_e2e${counter}${randomUUID().replace(/-/g, "").slice(0, 12)}`;
+  const token = tokenFor(id);
 
   return {
-    id: data.user.id,
-    email,
-    session: signedIn.session,
-    /** A client scoped to this user, the way PostgREST sees them. */
+    id,
+    token,
     db: createClient(API_URL, PUBLISHABLE_KEY, {
-      global: { headers: { Authorization: `Bearer ${signedIn.session.access_token}` } },
+      global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false, autoRefreshToken: false },
     }),
   };
@@ -63,22 +66,11 @@ export function asAdmin() {
 }
 
 /**
- * The cookies a signed-in browser would send, in @supabase/ssr's format.
- * The key is derived from the Supabase URL, exactly as supabase-js does it:
- * `sb-<first label of the API host>-auth-token`.
+ * The cookie a browser would send. Only used by the HTTP suite, which talks to
+ * a running server; the token is what the server's own client passes on.
  */
-export function sessionCookies(session) {
-  const storageKey = `sb-${new URL(API_URL).hostname.split(".")[0]}-auth-token`;
-  const encoded = `base64-${Buffer.from(JSON.stringify(session)).toString("base64url")}`;
-
-  const MAX = 3180;
-  if (encoded.length <= MAX) return { [storageKey]: encoded };
-
-  const chunks = {};
-  for (let i = 0; i * MAX < encoded.length; i += 1) {
-    chunks[`${storageKey}.${i}`] = encoded.slice(i * MAX, (i + 1) * MAX);
-  }
-  return chunks;
+export function sessionCookies(user) {
+  return { __session: user.token };
 }
 
 export function cookieHeader(cookies) {

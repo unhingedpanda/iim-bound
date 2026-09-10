@@ -32,4 +32,4 @@ export const DB_URL =
 
 /** Where the test Next server listens, and what it calls its own origin. */
 export const APP_PORT = Number(process.env.TEST_APP_PORT ?? 3100);
-export const APP_URL = `http://127.0.0.1:${APP_PORT}`;
+export const APP_URL = `http://localhost:${APP_PORT}`;

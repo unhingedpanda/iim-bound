@@ -37,8 +37,7 @@ test.describe("the system preference", () => {
 });
 
 test.describe("the profile's own choice", () => {
-  test("beats the system preference, and survives a reload", async ({ page, session }) => {
-    void session;
+  test("beats the system preference, and survives a reload", async ({ page }) => {
     await page.goto("/settings");
     await settle(page);
 

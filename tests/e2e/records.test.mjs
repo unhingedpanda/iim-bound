@@ -6,10 +6,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { app, bindSession } from "./app.mjs";
-import { asAdmin, newUser, sessionCookies } from "./client.mjs";
+import { asAdmin, newUser } from "./client.mjs";
 
 async function actAs(user) {
-  bindSession(sessionCookies(user.session));
+  bindSession(user);
   return app();
 }
 
