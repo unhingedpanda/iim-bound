@@ -56,6 +56,15 @@ supabase db push
 Or paste the files in `supabase/migrations/` into the SQL editor in the dashboard, in filename
 order.
 
+If `db push` cannot reach the database — the direct host is IPv6-only on some networks, and the
+IPv4 pooler may be blocked — `npm run db:migrate <version>` applies one migration through the
+Management API instead, using the CLI's own access token and recording it in
+`schema_migrations` exactly as the CLI would:
+
+```bash
+npm run db:migrate 20260910050000
+```
+
 For a local stack instead, `npm run test:up` starts one from `supabase/config.toml`. Its ports are
 in the `553xx` range rather than the Supabase defaults, so this project can run on the same machine
 as other Supabase projects without fighting over `54321`.

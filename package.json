@@ -17,7 +17,9 @@
     "test:down": "supabase stop",
     "test:e2e": "./tests/e2e/run.sh",
     "test:browser": "./tests/browser/run.sh",
-    "test:all": "npm run check && npm run test:e2e && npm run test:browser"
+    "test:all": "npm run check && npm run test:e2e && npm run test:browser",
+    "db:push": "supabase db push --linked",
+    "db:migrate": "node scripts/apply-migration.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
