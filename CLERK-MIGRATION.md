@@ -29,7 +29,7 @@ which Supabase Auth does not have.
 | Dev keys | `clerk env pull` → `.env.local`, redirects repointed `/` → `/today` |
 | Prod keys | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY_PROD`, `CLERK_SECRET_KEY_PROD` (added by hand) |
 | Prod instance | `ins_3J9T60OpKXCO2agAvtDIuD8BB3n` (live keys) |
-| **`role` claim** | JWT template `supabase` created on the **dev** instance: `{"role":"authenticated"}`, RS256, 60s |
+| **`role` claim** | JWT template `supabase` created on **both** instances: `{"role":"authenticated"}`, RS256, 60s |
 | `clerk doctor` | Clean. Warnings: production instance not in `.env.local` as the active keys; shell completion |
 | Backup | `/tmp/backup/*.json` — 1 user, 1 profile, 4 drills, 2 drill_log rows (move this somewhere durable) |
 
