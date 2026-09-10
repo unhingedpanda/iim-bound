@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Mark from "@/components/Mark";
 import { SITE } from "@/lib/site";
 import DemoTabs from "./DemoTabs";
 
@@ -7,8 +8,9 @@ export default function DemoLayout({ children }: { children: React.ReactNode }) 
     <div className="mx-auto max-w-[1200px] px-6 pb-24 pt-6">
       <header className="border-b-4 border-ink pb-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <Link href="/" className="display text-2xl">
-            {SITE.name}
+          <Link href="/" className="flex items-center gap-2.5">
+            <Mark size={24} />
+            <span className="display text-2xl">{SITE.name}</span>
           </Link>
           <div className="flex items-center gap-4">
             <span className="border-2 border-signal px-3 py-1 text-sm font-semibold text-signal">

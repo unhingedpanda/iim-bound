@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DesktopNav, MobileNav } from "@/components/AppNav";
+import Mark from "@/components/Mark";
 import { daysLeft, getProfile } from "@/lib/data";
 import { SITE } from "@/lib/site";
 import { currentUserId } from "@/lib/supabase/server";
@@ -24,8 +25,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <header className="sticky top-0 z-10 border-b-4 border-ink bg-paper">
         <div className="mx-auto flex max-w-[1200px] flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3">
           <div className="flex items-center gap-5">
-            <Link href="/today" className="display text-xl">
-              {SITE.name}
+            <Link href="/today" className="flex items-center gap-2.5">
+              <Mark />
+              <span className="display text-xl">{SITE.name}</span>
             </Link>
             <DesktopNav />
           </div>

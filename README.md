@@ -160,6 +160,17 @@ Three rules the rest of the code follows:
   a day of the server's, and the `log_focus_session` function re-checks the same window itself,
   because it is reachable straight through the API.
 
+### The mark
+
+Three bars gaining under a squared rising rule, the tallest in the signal blue — the run grid in
+miniature. The shapes live once in `src/lib/mark.ts` and are rendered by `src/components/Mark.tsx`
+and by `src/app/icon.svg`, which Next serves as the favicon. A file cannot import a module, so
+`tests/helpers.test.mjs` parses the SVG and checks it against the module: change a bar in one place
+and the suite fails rather than the two quietly disagreeing.
+
+Coordinates are whole pixels in a 32-unit box on purpose. A favicon is the one place this mark has
+to be sharp, and fractional values anti-alias into mush at 16px.
+
 ## Tests
 
 `npm run test` is fast and needs nothing running: it pins the exam model, the calendar arithmetic,

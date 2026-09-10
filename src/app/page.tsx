@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Mark from "@/components/Mark";
 import { daysBetween } from "@/lib/dates";
 import { today } from "@/lib/day";
 import { DEFAULT_DRILLS } from "@/lib/plan";
@@ -10,7 +11,10 @@ export default function Landing() {
   return (
     <main className="mx-auto max-w-[1200px] px-6 pb-24 pt-8">
       <nav className="flex items-center justify-between gap-4 pb-8">
-        <span className="text-sm font-semibold tracking-tight">{SITE.name}</span>
+        <span className="flex items-center gap-2.5">
+          <Mark size={22} />
+          <span className="text-sm font-semibold tracking-tight">{SITE.name}</span>
+        </span>
         <div className="flex items-center gap-5 text-sm">
           <a href={SITE.repoUrl} className="text-ink-2 underline underline-offset-4 hover:text-ink">
             Source

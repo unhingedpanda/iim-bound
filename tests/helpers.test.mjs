@@ -8,11 +8,13 @@
  */
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { PAPER } from "@/lib/cat.ts";
 import { addDays, daysBetween } from "@/lib/dates.ts";
 import { acceptDay, daysThrough, isDay, latestLoggableDay, MAX_DAY_SKEW, today } from "@/lib/day.ts";
 import { LIMITS, number, oneOf, optionalText, text, wholeNumber } from "@/lib/form.ts";
+import { MARK_BARS, MARK_COLORS, MARK_RULE } from "@/lib/mark.ts";
 import { mockCadence, nextSorts, phaseFor, slugify, SORT_STEP } from "@/lib/plan.ts";
 import { APP_ROUTES, isAppPath, safeNext } from "@/lib/routes.ts";
 
@@ -172,4 +174,29 @@ test("the exam model is internally consistent", () => {
   assert.equal(peak, 3, "three a week at the peak");
   assert.ok(mockCadence(7).perWeek < peak, "and tapering by the last week");
   assert.equal(mockCadence(1).perWeek, 0, "no mocks in the last days");
+});
+
+test("the favicon file matches the mark's geometry", () => {
+  // The mark is declared once in src/lib/mark.ts and rendered twice: by the
+  // component, and by src/app/icon.svg which Next turns into the favicon. A
+  // file cannot import a module, so this parses the file and checks it against
+  // the source of truth. Without it, changing a bar in one place and not the
+  // other is a silent, invisible divergence.
+  const svg = readFileSync(new URL("../src/app/icon.svg", import.meta.url), "utf8");
+
+  const rects = [...svg.matchAll(/<rect x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"/g)].map(
+    (m) => ({ x: +m[1], y: +m[2], w: +m[3], h: +m[4] }),
+  );
+  assert.deepEqual(
+    rects.map(({ x, y, w, h }) => ({ x, y, w, h })),
+    MARK_BARS.map(({ x, y, w, h }) => ({ x, y, w, h })),
+    "icon.svg's bars have drifted from MARK_BARS",
+  );
+
+  assert.ok(
+    svg.includes(`d="${MARK_RULE.d}"`),
+    "icon.svg's rising rule has drifted from MARK_RULE",
+  );
+  assert.ok(svg.includes(MARK_COLORS.signal), "icon.svg lost the signal blue");
+  assert.ok(svg.includes(MARK_COLORS.ink), "icon.svg lost the ink tile");
 });
