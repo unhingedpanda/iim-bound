@@ -54,7 +54,9 @@ export default function TodayView({
               <dt className="text-sm text-ink-3">Minutes today</dt>
               <dd className="display text-[clamp(32px,6vw,60px)]">
                 {minutesToday}
-                <span className="text-[0.4em] text-ink-3">/{dailyTarget(drillDefs)}</span>
+                {dailyTarget(drillDefs) > 0 ? (
+                  <span className="text-[0.4em] text-ink-3">/{dailyTarget(drillDefs)}</span>
+                ) : null}
               </dd>
             </div>
           </dl>

@@ -1,9 +1,22 @@
 /** All dates in this app are plain YYYY-MM-DD strings in the user's local day. */
 
+/**
+ * This app's users are all in India, but the server runs on UTC — reading the
+ * server's local day stamps 00:00–05:30 IST actions onto the previous day.
+ * Pin "today" to Asia/Kolkata so drill logs, streaks and countdowns agree
+ * with the wall clock the user actually lives by.
+ */
 export function todayISO(): string {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+  // Assembled from parts rather than trusting a locale's field order, so no
+  // ICU version can silently rearrange the day.
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 export function addDays(day: string, n: number): string {

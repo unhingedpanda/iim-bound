@@ -1,4 +1,5 @@
-import { addMock, deleteMock, setMockReviewed } from "@/app/actions";
+import { deleteMock, setMockReviewed } from "@/app/actions";
+import AddMockForm from "@/components/AddMockForm";
 import MockChart, { type ChartPoint } from "@/components/MockChart";
 import {
   attemptDiagnosis,
@@ -14,15 +15,12 @@ import type { Mock } from "@/lib/data";
 import { daysBetween, shortDate, todayISO } from "@/lib/dates";
 import { mockCadence, SECTIONS, type Section } from "@/lib/plan";
 
-const FIELD =
-  "w-full border-0 border-b-2 border-line bg-transparent py-2 text-base text-ink outline-none focus:border-ink";
-
 function pct(n: number | null) {
   return n === null ? "—" : n.toFixed(2);
 }
 
 /** Averages the last few mocks per section, then reads the same diagnosis off them. */
-function sectionForm(mocks: Mock[], section: Section) {
+function sectionForm(mocks: Mock[], section: Section, targetPercentile: number) {
   const key = section.toLowerCase() as "varc" | "dilr" | "qa";
   const rows = mocks
     .slice(-3)
@@ -43,7 +41,7 @@ function sectionForm(mocks: Mock[], section: Section) {
     net,
     accuracy: attempted > 0 ? correct / attempted : 0,
     percentile: estimatePercentile(section, net),
-    diagnosis: attemptDiagnosis(section, attempted, correct),
+    diagnosis: attemptDiagnosis(section, attempted, correct, targetPercentile),
   };
 }
 
@@ -68,7 +66,11 @@ export default function MocksView({
   const oldestUnreviewed = unreviewed[0];
 
   const cadence = mockCadence(daysLeft);
-  const lastWeek = mocks.filter((m) => daysBetween(m.taken_on, today) < 7).length;
+  // Defensive against pre-existing future-dated rows: only past dates count.
+  const lastWeek = mocks.filter((m) => {
+    const back = daysBetween(m.taken_on, today);
+    return back >= 0 && back < 7;
+  }).length;
 
   const points: ChartPoint[] = mocks
     .map((m) => ({ mock: m, summary: summarise(m) }))
@@ -81,7 +83,9 @@ export default function MocksView({
       estimated: summary.estimated,
     }));
 
-  const form = SECTIONS.map((s) => sectionForm(mocks, s)).filter((s) => s !== null);
+  const form = SECTIONS.map((s) => sectionForm(mocks, s, targetPercentile)).filter(
+    (s) => s !== null,
+  );
 
   // The gap, in the only unit you can act on: questions.
   const targetMarks = scoreForPercentile("OVERALL", targetPercentile);
@@ -121,19 +125,21 @@ export default function MocksView({
                 </p>
                 {gap != null ? (
                   <p className="mt-4 border-l-4 border-signal py-1 pl-4">
-                    {gap > 0 ? (
+                    {gap > 0.005 ? (
                       <>
                         <span className="font-bold">{gap.toFixed(1)} marks</span> short of{" "}
                         {targetPercentile}. That is {Math.ceil(gap / MARK_CORRECT)} more correct
                         answer
                         {Math.ceil(gap / MARK_CORRECT) === 1 ? "" : "s"} across the whole paper.
                       </>
-                    ) : (
+                    ) : gap < -0.005 ? (
                       <>
                         Past {targetPercentile} on this one, by{" "}
                         <span className="font-bold">{Math.abs(gap).toFixed(1)} marks</span>. Now do
                         it twice more.
                       </>
+                    ) : (
+                      <>Right on {targetPercentile} with this one. Now do it twice more.</>
                     )}
                   </p>
                 ) : null}
@@ -154,8 +160,11 @@ export default function MocksView({
             <span className="font-bold">
               {unreviewed.length} mock{unreviewed.length > 1 ? "s" : ""} unanalysed
             </span>{" "}
-            — the oldest sat {daysBetween(oldestUnreviewed.taken_on, today)} days ago. Sitting a
-            mock costs two hours; skipping the review wastes them.
+            — the oldest sat {(() => {
+              const daysAgo = Math.max(0, daysBetween(oldestUnreviewed.taken_on, today));
+              if (daysAgo === 0) return "today";
+              return `${daysAgo} day${daysAgo > 1 ? "s" : ""} ago`;
+            })()}. Sitting a mock costs two hours; skipping the review wastes them.
           </p>
         ) : null}
       </section>
@@ -183,7 +192,7 @@ export default function MocksView({
             <h2 id="form-h" className="display text-[clamp(24px,4vw,36px)]">
               Where the marks go
             </h2>
-            <p className="text-sm text-ink-2">averaged over your last {form[0]?.mocks} mocks</p>
+            <p className="text-sm text-ink-2">averaged over up to your last 3 mocks</p>
           </div>
 
           <ul className="mt-6 grid gap-x-8 gap-y-10 lg:grid-cols-3">
@@ -346,126 +355,7 @@ export default function MocksView({
           for a series that reports one.
         </p>
 
-        <form action={demo ? undefined : addMock} className="mt-8">
-          <fieldset disabled={demo} className="grid gap-8">
-            <div className="grid gap-6 sm:grid-cols-2 lg:max-w-[640px]">
-              <label className="grid gap-1 text-sm text-ink-2">
-                Date
-                <input
-                  type="date"
-                  name="taken_on"
-                  defaultValue={today}
-                  required
-                  className={FIELD}
-                />
-              </label>
-              <label className="grid gap-1 text-sm text-ink-2">
-                Which mock
-                <input
-                  type="text"
-                  name="series"
-                  required
-                  placeholder="SimCAT 5"
-                  className={FIELD}
-                />
-              </label>
-            </div>
-
-            <div>
-              <div className="hidden grid-cols-[80px_1fr_1fr_1fr] gap-4 border-b-2 border-ink pb-2 text-sm text-ink-3 sm:grid">
-                <span />
-                <span>Attempted</span>
-                <span>Correct</span>
-                <span>Percentile, if reported</span>
-              </div>
-              {SECTIONS.map((section) => {
-                const key = section.toLowerCase();
-                return (
-                  <div
-                    key={section}
-                    className="grid items-end gap-x-4 gap-y-3 border-b border-line py-4 sm:grid-cols-[80px_1fr_1fr_1fr]"
-                  >
-                    <span className="display text-xl">{section}</span>
-                    <label className="grid gap-1 text-xs text-ink-3">
-                      <span className="sm:hidden">Attempted</span>
-                      <input
-                        type="number"
-                        name={`${key}_attempted`}
-                        min={0}
-                        max={PAPER[section].questions}
-                        placeholder={`of ${PAPER[section].questions}`}
-                        className={FIELD}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs text-ink-3">
-                      <span className="sm:hidden">Correct</span>
-                      <input
-                        type="number"
-                        name={`${key}_correct`}
-                        min={0}
-                        max={PAPER[section].questions}
-                        className={FIELD}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs text-ink-3">
-                      <span className="sm:hidden">Percentile, if reported</span>
-                      <input
-                        type="number"
-                        name={key}
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        placeholder="optional"
-                        className={FIELD}
-                      />
-                    </label>
-                  </div>
-                );
-              })}
-              <div className="grid items-end gap-x-4 gap-y-3 py-4 sm:grid-cols-[80px_1fr_1fr_1fr]">
-                <span className="text-sm font-bold">Overall</span>
-                <span className="hidden sm:block" />
-                <span className="hidden sm:block" />
-                <label className="grid gap-1 text-xs text-ink-3">
-                  <span className="sm:hidden">Overall percentile, if reported</span>
-                  <input
-                    type="number"
-                    name="overall"
-                    min={0}
-                    max={100}
-                    step="0.01"
-                    placeholder="optional"
-                    className={FIELD}
-                  />
-                </label>
-              </div>
-            </div>
-
-            <label className="grid gap-1 text-sm text-ink-2 lg:max-w-[640px]">
-              The one thing to do differently next time
-              <input
-                type="text"
-                name="takeaway"
-                maxLength={300}
-                placeholder="Choose the DILR set for three minutes before committing"
-                className={FIELD}
-              />
-            </label>
-
-            <div className="flex flex-wrap items-center gap-6">
-              <label className="flex items-center gap-3 text-sm">
-                <input type="checkbox" name="reviewed" className="size-4 accent-[var(--signal)]" />
-                Already analysed in full
-              </label>
-              <button
-                type="submit"
-                className="bg-ink px-6 py-3 font-semibold text-paper disabled:opacity-40"
-              >
-                Add mock
-              </button>
-            </div>
-          </fieldset>
-        </form>
+        <AddMockForm today={today} demo={demo} />
       </section>
     </main>
   );

@@ -137,6 +137,10 @@ export function currentStreak(
   drills: Drill[],
   threshold: number,
 ): number {
+  // No drills means no bar to clear: without this, needed is 0 and every day
+  // back to started_on counts, exploding the streak the moment a user archives
+  // their last drill.
+  if (!drills.length) return 0;
   const needed = Math.min(threshold, drills.length);
   let streak = 0;
   let cursor = today;

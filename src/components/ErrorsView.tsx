@@ -1,19 +1,8 @@
 import { addMistake, resolveMistake } from "@/app/actions";
 import { shortDate } from "@/lib/dates";
-import { SECTIONS } from "@/lib/plan";
+import { MISTAKE_CAUSES as CAUSES, SECTIONS } from "@/lib/plan";
 
-/**
- * The causes CAT analysis guides separate out. They matter because the fix is
- * different for each: only the first one is solved by studying more.
- */
-export const CAUSES = [
-  { key: "concept", label: "Concept", fix: "You did not know it. Studying is the fix." },
-  { key: "careless", label: "Careless", fix: "You knew it and slipped. Studying will not help." },
-  { key: "misread", label: "Misread", fix: "You solved a question the paper did not ask." },
-  { key: "time", label: "Time", fix: "You knew it and ran out. A pacing problem." },
-  { key: "selection", label: "Selection", fix: "You attempted one you should have skipped." },
-  { key: "missed", label: "Missed easy", fix: "You skipped one you could have solved." },
-] as const;
+export { CAUSES };
 
 export type MistakeRow = {
   id: string;
@@ -59,8 +48,8 @@ export default function ErrorsView({
               {notConcept > open.length / 2 ? (
                 <>
                   Most of your open errors are <span className="font-bold">not knowledge gaps</span>
-                  . {notConcept} of {open.length} are careless, misread, timing or selection — more
-                  studying will not touch them.
+                  . {notConcept} of {open.length} are careless, misread, timing, selection or
+                  missed-easy — more studying will not touch them.
                 </>
               ) : (
                 <>
@@ -72,7 +61,7 @@ export default function ErrorsView({
           ) : (
             <p className="max-w-[46ch] text-lg text-ink-2">
               Every mistake from a mock review goes here, tagged by what actually went wrong. The
-              tag is the point: four of these six are fixed by changing how you sit the paper, not
+              tag is the point: five of these six are fixed by changing how you sit the paper, not
               by studying.
             </p>
           )}

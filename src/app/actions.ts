@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { PAPER } from "@/lib/cat";
 import { todayISO } from "@/lib/dates";
-import { SECTIONS, slugify } from "@/lib/plan";
+import { MISTAKE_CAUSES, SECTIONS, slugify } from "@/lib/plan";
 import { createClient, currentUserId } from "@/lib/supabase/server";
 
 async function requireUser() {
@@ -31,7 +31,8 @@ export async function toggleDrill(formData: FormData) {
   const drillKey = String(formData.get("drill_key") ?? "");
   const day = String(formData.get("on_day") ?? todayISO());
   const done = formData.get("done") === "true";
-  if (!drillKey) return;
+  if (!drillKey || drillKey.length > 32) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
 
   const supabase = await createClient();
   await supabase.from("drill_log").upsert(
@@ -49,36 +50,22 @@ export async function toggleDrill(formData: FormData) {
 }
 
 export async function logMinutes(formData: FormData) {
-  const userId = await requireUser();
+  await requireUser();
   const drillKey = String(formData.get("drill_key") ?? "");
   const seconds = Number(formData.get("seconds") ?? 0);
   const day = String(formData.get("on_day") ?? todayISO());
-  if (!drillKey || !Number.isFinite(seconds) || seconds < 1) return;
+  if (!drillKey || drillKey.length > 32) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+  if (!Number.isFinite(seconds) || seconds < 1) return;
 
+  // One atomic transaction (insert + derived minutes), so concurrent stops
+  // serialise instead of losing a session to last-write-wins.
   const supabase = await createClient();
-  await supabase
-    .from("focus_sessions")
-    .insert({ user_id: userId, on_day: day, drill_key: drillKey, seconds: Math.round(seconds) });
-
-  const { data: existing } = await supabase
-    .from("drill_log")
-    .select("minutes")
-    .eq("user_id", userId)
-    .eq("on_day", day)
-    .eq("drill_key", drillKey)
-    .maybeSingle();
-
-  const minutes = (existing?.minutes ?? 0) + Math.round(seconds / 60);
-  await supabase.from("drill_log").upsert(
-    {
-      user_id: userId,
-      on_day: day,
-      drill_key: drillKey,
-      minutes,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id,on_day,drill_key" },
-  );
+  await supabase.rpc("log_focus_session", {
+    p_on_day: day,
+    p_drill_key: drillKey,
+    p_seconds: Math.round(seconds),
+  });
 
   revalidatePath("/today");
 }
@@ -179,32 +166,44 @@ export async function moveDrill(formData: FormData) {
 
 /* ------------------------------------------------------------------- mocks */
 
-export async function addMock(formData: FormData) {
+export type MockFormState = { ok: boolean; error: string | null };
+
+const INVALID = "invalid" as const;
+
+export async function addMock(_prev: MockFormState, formData: FormData): Promise<MockFormState> {
   const userId = await requireUser();
   const supabase = await createClient();
+  const fail = (error: string): MockFormState => ({ ok: false, error });
 
-  /** A percentile, if the series gave you one. */
-  const percentile = (name: string) => {
+  /** A percentile, if the series gave you one. Blank is fine; anything else
+   *  outside 0–100 is a typo worth flagging, not silently dropping. */
+  const percentile = (name: string): number | null | typeof INVALID => {
     const raw = formData.get(name);
     if (raw === null || raw === "") return null;
     const n = Number(raw);
-    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : null;
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : INVALID;
   };
 
-  /** A question count, capped at what the section actually holds. */
-  const count = (name: string, max: number) => {
+  /** A question count. Blank means "not logging this"; anything outside what
+   *  the section holds is rejected rather than nulled or clamped. */
+  const count = (name: string, max: number): number | null | typeof INVALID => {
     const raw = formData.get(name);
     if (raw === null || raw === "") return null;
-    const n = Math.round(Number(raw));
-    return Number.isFinite(n) && n >= 0 && n <= max ? n : null;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 0 && n <= max ? n : INVALID;
   };
 
   const series = trimmed(formData.get("series"), 80);
-  if (!series) return;
+  if (!series) return fail("Give the mock a name — e.g. SimCAT 5.");
+
+  const takenOn = String(formData.get("taken_on") ?? todayISO());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(takenOn)) return fail("Enter a real date for when you sat it.");
+  const today = todayISO();
+  if (takenOn > today) return fail("That date is in the future — log mocks for today or earlier.");
 
   const row: Record<string, unknown> = {
     user_id: userId,
-    taken_on: String(formData.get("taken_on") ?? todayISO()),
+    taken_on: takenOn,
     series,
     takeaway: trimmed(formData.get("takeaway"), 300) || null,
     reviewed: formData.get("reviewed") === "on",
@@ -215,21 +214,31 @@ export async function addMock(formData: FormData) {
     const key = section.toLowerCase();
     const max = PAPER[section].questions;
     const attempted = count(`${key}_attempted`, max);
+    if (attempted === INVALID)
+      return fail(`${section} attempted must be a whole number between 0 and ${max}.`);
     const correct = count(`${key}_correct`, max);
+    if (correct === INVALID)
+      return fail(`${section} correct must be a whole number between 0 and ${max}.`);
+    if (attempted !== null && correct !== null && correct > attempted)
+      return fail(
+        `${section} correct (${correct}) is more than attempted (${attempted}) — fix the numbers.`,
+      );
     row[`${key}_attempted`] = attempted;
-    // Never store more correct than attempted — the check constraint would
-    // reject the whole row and the user would lose everything they typed.
-    row[`${key}_correct`] =
-      correct === null || attempted === null ? correct : Math.min(correct, attempted);
-    row[key] = percentile(key);
+    row[`${key}_correct`] = correct;
+    const p = percentile(key);
+    if (p === INVALID) return fail(`${section} percentile must be between 0 and 100.`);
+    row[key] = p;
   }
-  row.overall = percentile("overall");
+  const overall = percentile("overall");
+  if (overall === INVALID) return fail("Overall percentile must be between 0 and 100.");
+  row.overall = overall;
 
   const { error } = await supabase.from("mocks").insert(row);
   if (error) throw new Error(`Could not save that mock: ${error.message}`);
 
   revalidatePath("/mocks");
   revalidatePath("/today");
+  return { ok: true, error: null };
 }
 
 export async function setMockReviewed(formData: FormData) {
@@ -299,6 +308,8 @@ export async function deleteTopic(formData: FormData) {
 
 /* ---------------------------------------------------------------- mistakes */
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function addMistake(formData: FormData) {
   const userId = await requireUser();
   const note = trimmed(formData.get("note"), 2000);
@@ -308,15 +319,30 @@ export async function addMistake(formData: FormData) {
 
   if (!note) return;
   if (!SECTIONS.includes(section as (typeof SECTIONS)[number])) return;
+  if (!MISTAKE_CAUSES.some((c) => c.key === cause)) return;
 
   const supabase = await createClient();
+
+  // A forged mock_id must not 500 on cast or point at someone else's mock.
+  let mockId: string | null = null;
+  const rawMockId = trimmed(formData.get("mock_id"), 40);
+  if (rawMockId && UUID_RE.test(rawMockId)) {
+    const { data: owned } = await supabase
+      .from("mocks")
+      .select("id")
+      .eq("id", rawMockId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (owned) mockId = rawMockId;
+  }
+
   await supabase.from("mistakes").insert({
     user_id: userId,
     section,
     cause,
     topic: topic || null,
     note,
-    mock_id: trimmed(formData.get("mock_id"), 40) || null,
+    mock_id: mockId,
   });
 
   revalidatePath("/errors");

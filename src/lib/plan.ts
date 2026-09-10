@@ -54,6 +54,21 @@ export function dailyTarget(drills: Pick<Drill, "target_minutes">[]) {
 export const SECTIONS = ["VARC", "DILR", "QA"] as const;
 export type Section = (typeof SECTIONS)[number];
 
+/**
+ * The causes CAT analysis guides separate out. They matter because the fix is
+ * different for each: only the first one is solved by studying more.
+ * Single source: the error log UI and the addMistake allow-list both read
+ * this, so a new cause can't be added to one and silently dropped by the other.
+ */
+export const MISTAKE_CAUSES = [
+  { key: "concept", label: "Concept", fix: "You did not know it. Studying is the fix." },
+  { key: "careless", label: "Careless", fix: "You knew it and slipped. Studying will not help." },
+  { key: "misread", label: "Misread", fix: "You solved a question the paper did not ask." },
+  { key: "time", label: "Time", fix: "You knew it and ran out. A pacing problem." },
+  { key: "selection", label: "Selection", fix: "You attempted one you should have skipped." },
+  { key: "missed", label: "Missed easy", fix: "You skipped one you could have solved." },
+] as const;
+
 export const CONFIDENCE_LABELS = ["Untouched", "Shaky", "Solid", "Automatic"];
 
 export type Phase = { from: string; to: string; title: string; detail: string };
