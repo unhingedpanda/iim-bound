@@ -1,3 +1,4 @@
+import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DesktopNav, MobileNav } from "@/components/AppNav";
@@ -32,15 +33,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <DesktopNav />
           </div>
 
-          <div className="flex items-baseline gap-4">
+          <div className="flex items-center gap-4">
             <span className="text-sm text-ink-2">
               <span className="display text-xl text-ink">{left}</span> days to {SITE.examLabel}
             </span>
-            <form action="/auth/signout" method="post">
-              <button type="submit" className="text-sm text-ink-3 underline underline-offset-4">
-                Sign out
-              </button>
-            </form>
+            {/* Clerk's own menu: signing out, plus the account management that
+                comes with it. It replaced a hand-rolled POST form, which could
+                be fired by a prefetch or a back button. */}
+            <UserButton
+              showName={false}
+              appearance={{ elements: { avatarBox: "size-8 rounded-none" } }}
+            />
           </div>
         </div>
       </header>

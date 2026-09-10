@@ -16,16 +16,22 @@
  */
 
 import { installResolver } from "./bootstrap.mjs";
-import { bindCookieJar } from "./stubs/headers.mjs";
+import { bindClerkSession } from "./stubs/clerk-server.mjs";
 
 // Must happen before any application module is imported below.
 installResolver();
 
-/** Point the app at one signed-in (or anonymous) user. */
-export function bindSession(cookies = {}) {
-  const jar = bindCookieJar(cookies);
+/**
+ * Point the app at one signed-in (or anonymous) user.
+ *
+ * Takes the identity rather than a cookie jar, because that is what identifies
+ * a caller now: Clerk's user id, plus a Supabase token signed for it. The app's
+ * own client passes the token, exactly as it does in the browser.
+ */
+export function bindSession(user = null) {
+  bindClerkSession(user ? { userId: user.id, token: user.token } : {});
   globalThis.__E2E_REFRESHES__ = 0;
-  return jar;
+  return user;
 }
 
 /** How many times the code under test asked for a re-render. */

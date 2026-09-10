@@ -1,44 +1,94 @@
 /**
- * A signed-in browser, and the vocabulary the layout specs share.
+ * A signed-in browser, and the vocabulary the specs share.
  *
- * Authentication goes through the same real path as the HTTP suite: a
- * service-role account creation, a password sign-in, and the session written
- * into cookies in @supabase/ssr's own format. Nothing is stubbed, so a spec
- * that renders a page is proving the proxy, the layout gate, RLS and the
- * server components all agreed — not that a mock returned a fixture.
+ * Authentication is real: Clerk's testing token gets a headless browser past
+ * bot protection, and `clerk.signIn` mints a sign-in ticket through Clerk's
+ * backend API, so the session, the cookies and the Supabase JWT are the same
+ * ones a person gets. Nothing is faked — this suite exists to prove the
+ * Clerk-to-Supabase chain works, and a stubbed session would prove the opposite
+ * of what it claims.
+ *
+ * The signed-in state is captured once and reused, because signing in per test
+ * is slow and the state is portable: cookies plus localStorage.
  */
 
+import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 import { test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { newUser, sessionCookies } from "../e2e/client.mjs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { dirname } from "node:path";
+import { APP_URL } from "../e2e/stack.mjs";
 
-export type Session = Awaited<ReturnType<typeof newUser>>;
+/** Where the captured session lives between runs. Never committed. */
+const STATE = "/tmp/iim-bound-browser-state.json";
 
-type Fixtures = {
-  /** A fresh account, signed in, with the session cookies already applied. */
-  session: Session;
-};
+/** The Clerk test account. Created by tests/e2e/clerk.mjs against the dev instance. */
+export const E2E_EMAIL = process.env.E2E_CLERK_EMAIL ?? "e2e-clerk@gmail.com";
+
+/**
+ * Sign in for real, then remember it.
+ *
+ * Clerk requires a page that loads its client before signIn is called, and the
+ * session it establishes is stored in cookies and localStorage — which is
+ * exactly what a storage state captures.
+ */
+export async function signIn(page: Page) {
+  await page.goto(`${APP_URL}/login`);
+  await setupClerkTestingToken({ page });
+  await clerk.signIn({ page, emailAddress: E2E_EMAIL });
+  mkdirSync(dirname(STATE), { recursive: true });
+  await page.context().storageState({ path: STATE });
+}
+
+type Fixtures = { page: Page };
 
 export const test = base.extend<Fixtures>({
-  session: async ({ context }, use) => {
-    const user = await newUser();
-    const cookies = sessionCookies(user.session);
+  page: async ({ browser }, use) => {
+    if (!existsSync(STATE)) {
+      const warmup = await browser.newContext();
+      const page = await warmup.newPage();
+      try {
+        await signIn(page);
+      } finally {
+        await warmup.close();
+      }
+    }
 
-    await context.addCookies(
-      Object.entries(cookies).map(([name, value]) => ({
-        name,
-        value: String(value),
-        domain: "127.0.0.1",
-        path: "/",
-        httpOnly: false,
-        secure: false,
-        sameSite: "Lax" as const,
-      })),
-    );
-
-    await use(user);
+    const context = await browser.newContext({ storageState: STATE });
+    const page = await context.newPage();
+    try {
+      await use(page);
+    } finally {
+      await context.close();
+    }
   },
 });
+
+/**
+ * For specs that must start signed out.
+ *
+ * A separate object rather than a flag on the signed-in one, and deliberately
+ * not decided by inspecting the test's title: an earlier version matched on a
+ * substring, silently failed to match, and handed the sign-in specs an
+ * authenticated browser — which then got redirected away from /login by the
+ * proxy working exactly as intended. Opting out has to be explicit.
+ */
+export const anonTest = base.extend<Fixtures>({
+  page: async ({ browser }, use) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await use(page);
+    } finally {
+      await context.close();
+    }
+  },
+});
+
+/** Forget the captured session, so the next run signs in from scratch. */
+export function clearSession() {
+  rmSync(STATE, { force: true });
+}
 
 export { expect } from "@playwright/test";
 

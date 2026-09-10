@@ -3,28 +3,32 @@
  *
  * The e2e suite makes a fresh user per test and throws it away, so it is
  * useless for the one thing a person actually wants to do after a UI change:
- * sign in and click around. This makes a stable account with three weeks of
- * plausible use behind it, weighted so the streak is real and the run grid has
- * something to say.
+ * sign in and click around. This gives a stable account three weeks of
+ * plausible use, weighted so the streak is real and the run grid has something
+ * to say.
  *
- * Local only, and deliberately so: it reads the CLI's own service key and
- * refuses to run against anything that is not 127.0.0.1. Rows are written
- * through PostgREST with the *user's* token rather than the service key, so
- * RLS applies to this script exactly as it applies to the browser — if the
- * policies would reject the app's writes, they reject these too.
+ * Since Clerk owns sign-in, this cannot create the account it seeds — Clerk
+ * holds the password, and there is nothing in Postgres to insert. So it seeds
+ * for a Clerk user who already exists, found by id, email or username:
  *
- *   node scripts/demo-seed.mjs
+ *   node scripts/demo-seed.mjs                      # the only Clerk user, if there is one
+ *   node scripts/demo-seed.mjs yash@example.com
+ *   node scripts/demo-seed.mjs user_3J9WUW4lHT8LGt4uqF4rMeVNv3z
+ *
+ * Sign in as that user in the browser and the history is there.
+ *
+ * Local only, and deliberately so: it refuses to run against anything that is
+ * not 127.0.0.1. Rows are written through PostgREST with that user's own token
+ * rather than the service key, so RLS applies to this script exactly as it
+ * applies to the browser — if the policies would reject the app's writes, they
+ * reject these too.
  */
 
 import { execFileSync } from "node:child_process";
 import { createClient } from "@supabase/supabase-js";
+import { localToken } from "./local-token.mjs";
 
-const API_URL = "http://127.0.0.1:55321";
-const PUBLISHABLE_KEY = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH";
 const DAY_ZONE = "Asia/Kolkata";
-
-const EMAIL = "demo@iimbound.local";
-const PASSWORD = "demo-password-123";
 
 /** The four defaults every account is seeded with, and their daily targets. */
 const DRILLS = [
@@ -55,7 +59,20 @@ function addDays(day, n) {
   return d.toISOString().slice(0, 10);
 }
 
-function serviceKey() {
+/** Deterministic, so re-running gives the same picture rather than noise. */
+function wobble(seed) {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * The local stack's URL, publishable key and JWT secret.
+ *
+ * Asking the CLI rather than reading .env.local, because the point of this
+ * script is to write to the stack the app is running against, and `supabase
+ * status` is the stack's own answer for where that is.
+ */
+function localStack() {
   const raw = execFileSync("npx", ["supabase", "status", "-o", "json"], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
@@ -64,41 +81,63 @@ function serviceKey() {
   if (!String(status.API_URL).includes("127.0.0.1")) {
     throw new Error(`Refusing to seed a non-local stack: ${status.API_URL}`);
   }
-  return status.SERVICE_ROLE_KEY;
+  return {
+    url: status.API_URL,
+    key: status.PUBLISHABLE_KEY,
+    secret: status.JWT_SECRET,
+  };
 }
 
-/** Deterministic, so re-running gives the same picture rather than noise. */
-function wobble(seed) {
-  const x = Math.sin(seed * 12.9898) * 43758.5453;
-  return x - Math.floor(x);
+/**
+ * Which Clerk user to seed.
+ *
+ * `clerk users list` is the dev instance's own answer, so this cannot seed an
+ * id that does not exist there — which would look like a bug in the app when
+ * the developer signed in and found nothing.
+ */
+function resolveUser(wanted) {
+  const raw = execFileSync("npx", ["clerk", "users", "list"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  const users = JSON.parse(raw).data ?? [];
+
+  if (!users.length) {
+    throw new Error(
+      "No Clerk users on the development instance. Sign up in the browser first, then re-run.",
+    );
+  }
+
+  if (!wanted) {
+    if (users.length > 1) {
+      const names = users.map(
+        (u) => `  ${u.id}  ${u.username ?? u.email_addresses[0]?.email_address}`,
+      );
+      throw new Error(`Several Clerk users — name one:\n${names.join("\n")}`);
+    }
+    return users[0];
+  }
+
+  const match = users.find(
+    (u) =>
+      u.id === wanted ||
+      u.username === wanted ||
+      u.email_addresses.some((e) => e.email_address === wanted),
+  );
+  if (!match) throw new Error(`No Clerk user matching "${wanted}"`);
+  return match;
 }
 
-const admin = createClient(API_URL, serviceKey(), {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-const { data: createdUser, error: createError } = await admin.auth.admin.createUser({
-  email: EMAIL,
-  password: PASSWORD,
-  email_confirm: true,
-});
-const created = createError ? null : (createdUser?.user?.id ?? null);
-if (createError && !/already/i.test(createError.message)) {
-  throw new Error(`createUser failed: ${createError.message}`);
-}
-
-const { data: signedIn, error: signInError } = await createClient(API_URL, PUBLISHABLE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-}).auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
-if (signInError) throw new Error(`signIn failed: ${signInError.message}`);
+const stack = localStack();
+const clerkUser = resolveUser(process.argv[2]);
+const userId = clerkUser.id;
 
 // The user's own token, so every write below goes through RLS.
-const db = createClient(API_URL, PUBLISHABLE_KEY, {
-  global: { headers: { Authorization: `Bearer ${signedIn.session.access_token}` } },
+const db = createClient(stack.url, stack.key, {
+  global: { headers: { Authorization: `Bearer ${localToken(userId, stack.secret)}` } },
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-const userId = signedIn.user.id;
 const start = addDays(today(), -(DAYS - 1));
 
 async function wipe(table) {
@@ -173,7 +212,7 @@ const { data: profile } = await db.from("profiles").select("id").eq("id", userId
 if (!profile) {
   const { error } = await db.from("profiles").insert({
     id: userId,
-    display_name: "Demo",
+    display_name: clerkUser.username ?? clerkUser.first_name ?? "Demo",
     exam_date: "2026-11-29",
     started_on: start,
     streak_threshold: 3,
@@ -184,12 +223,13 @@ if (!profile) {
   if (error) throw new Error(`creating profile: ${error.message}`);
 }
 
+const name = clerkUser.username ?? clerkUser.email_addresses[0]?.email_address ?? userId;
 const doneDays = new Set(logs.filter((l) => l.done).map((l) => l.on_day)).size;
 console.log(
   [
-    `seeded ${EMAIL} / ${PASSWORD}`,
+    `seeded ${name} (${userId})`,
     `  ${logs.length} drill rows over ${DAYS} days, ${doneDays} of them past the threshold`,
     `  ${sessions.length} focus sessions`,
-    `  ${created ? "account created" : "account already existed"} (id ${userId})`,
+    "  sign in as that account to see it",
   ].join("\n"),
 );

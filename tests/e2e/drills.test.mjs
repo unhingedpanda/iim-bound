@@ -8,11 +8,11 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { app, bindSession, refreshes } from "./app.mjs";
-import { asAdmin, newUser, sessionCookies } from "./client.mjs";
+import { asAdmin, newUser } from "./client.mjs";
 
 /** Sign the app in as this user, with the cookies a browser would send. */
 async function actAs(user) {
-  bindSession(sessionCookies(user.session));
+  bindSession(user);
   return app();
 }
 
