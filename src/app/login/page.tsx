@@ -5,16 +5,19 @@ import Mark from "@/components/Mark";
 export const metadata = { title: "Sign in · IIM Bound" };
 
 /**
- * Sign-in, in the app's own shell.
+ * Sign-in and sign-up, in the app's own shell.
  *
  * Clerk's component does the work — email or username with a password, plus
- * Google, plus the email-link fallback — because every one of those flows is
- * harder to get right by hand than it looks, and Supabase's hosted form is what
- * this replaces. The page keeps its own masthead and copy so the first screen
- * still looks like this app rather than like a vendor's.
+ * Google — because every one of those flows is harder to get right by hand than
+ * it looks, and Supabase's hosted form is what this replaces. The page keeps
+ * its own masthead and copy so the first screen still looks like this app
+ * rather than like a vendor's.
  *
- * `/sign-in` and `/sign-up` are pointed here by NEXT_PUBLIC_CLERK_SIGN_IN_URL and
- * _SIGN_UP_URL: one screen that handles both, because Clerk's component does.
+ * `withSignUp` is what makes one screen enough. Without it `<SignIn>` is
+ * sign-in only: an address it does not recognise comes back as "couldn't find
+ * your account", and the "Sign up" link goes wherever NEXT_PUBLIC_CLERK_SIGN_UP_URL
+ * points — which is here, because there is no second page. That combination
+ * left a new person with no way in at all.
  */
 export default function LoginPage() {
   return (
@@ -29,13 +32,14 @@ export default function LoginPage() {
           syllabus you can actually see the holes in.
         </p>
         <p className="mt-6 max-w-[42ch] text-sm text-ink-3">
-          Pick a username and a password and you are in — no waiting for a link. Or use your email,
-          or Google.
+          Pick a username and a password and you are in — no waiting for a link. Or use the address
+          you already signed up with.
         </p>
       </div>
 
       <div className="flex justify-center lg:justify-self-end lg:w-full lg:max-w-[440px]">
         <SignIn
+          withSignUp
           appearance={{
             variables: {
               colorPrimary: "var(--signal)",

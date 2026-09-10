@@ -30,7 +30,7 @@ The register makes each of those a number on a screen instead of a feeling.
 | Framework | Next.js 16 (App Router, React 19, Server Actions) |
 | Styling | Tailwind CSS v4, CSS-first theme tokens |
 | Data | Supabase Postgres with row-level security |
-| Auth | Clerk — email or username with a password, plus Google |
+| Auth | Clerk — email or username with a password |
 | Lint & format | Biome |
 | Hosting | Vercel |
 
@@ -94,6 +94,26 @@ session token; without it Supabase rejects the token outright rather than return
 `supabase/config.toml` carries the matching switch for a local stack — a
 `[auth.third_party.clerk]` block naming the Clerk instance's frontend API host. Point it at your
 own instance's host, bare (no scheme, no path).
+
+### Google, and why it is off
+
+A Clerk *development* instance ships with shared Google credentials, so Google sign-in works there
+with nothing configured. A **production** instance does not: Clerk requires your own Google OAuth
+client, because the shared one's registered redirect URIs are Clerk's and cannot include your
+domain. Leaving the connection enabled without it puts a button on the sign-in form that lands the
+user on `accounts.google.com/signin/oauth/error`.
+
+So it is disabled on production, and the form offers what actually works. To turn it on: create a
+Web application OAuth client in the Google Cloud console, paste Clerk's **Authorized Redirect URI**
+(from the dashboard's SSO connections page) into it, then give Clerk the client id and secret —
+
+```bash
+npx clerk config patch --instance prod \
+  --json '{"connection_oauth_google":{"enabled":true,"client_id":"…","client_secret":"…"}}'
+```
+
+There is nothing to change in this repository, and `withSignUp` on `/login` means the button
+appears the moment the connection is real.
 
 
 ### Scripts
