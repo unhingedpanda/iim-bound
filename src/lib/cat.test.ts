@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import {
   attemptDiagnosis,
+  estimate,
   estimatePercentile,
   NET_QUESTIONS_AT_99,
   netScore,
@@ -42,12 +43,14 @@ const s = summarise({
   overall: null,
 });
 assert.equal(s.net, 42 + 24 + 26);
+assert.equal(s.complete, true);
+assert.equal(s.sectionsLogged, 3);
 assert.equal(s.sections[0].percentile, 97.5);
 assert.equal(s.sections[0].estimated, false);
 assert.equal(s.sections[1].estimated, true);
 assert.ok(s.estimated && s.scored);
 
-// A half-filled row says nothing rather than guessing.
+// Nothing filled in says nothing rather than guessing.
 const empty = summarise({
   varc_attempted: null,
   varc_correct: null,
@@ -62,6 +65,35 @@ const empty = summarise({
 });
 assert.equal(empty.net, null);
 assert.equal(empty.scored, false);
+assert.equal(empty.sectionsLogged, 0);
+
+// A sectional test is still a mock worth showing: one section logged gives a
+// net and a section percentile, and an overall of null rather than a figure
+// read off a whole-paper curve.
+const sectional = summarise({
+  varc_attempted: 24,
+  varc_correct: 20,
+  dilr_attempted: null,
+  dilr_correct: null,
+  qa_attempted: null,
+  qa_correct: null,
+  varc: null,
+  dilr: null,
+  qa: null,
+  overall: null,
+});
+assert.equal(sectional.net, 56);
+assert.equal(sectional.sectionsLogged, 1);
+assert.equal(sectional.complete, false);
+assert.equal(sectional.scored, true);
+assert.equal(sectional.percentile, null, "a part paper must not get an overall percentile");
+assert.equal(sectional.sections[0].percentile, 99.9);
+// 56 marks is past the top anchor of 53, so it is a floor, not a reading.
+assert.equal(sectional.sections[0].basis, "ceiling");
+assert.equal(estimate("VARC", 26)?.basis, "curve");
+assert.equal(estimate("DILR", 2)?.basis, "below");
+assert.equal(estimate("QA", 40)?.basis, "ceiling");
+assert.equal(estimate("QA", 40)?.percentile, 99.9);
 
 // Section targets are derived from the same curves as the percentiles, so the
 // diagnosis and the percentile can never disagree the way the old hardcoded

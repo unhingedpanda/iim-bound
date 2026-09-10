@@ -40,7 +40,7 @@ export default function LoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={onSubmit} className="grid gap-4">
-      <label className="grid gap-2">
+      <label htmlFor="email" className="grid gap-2">
         <span className="text-sm text-ink-2">Email</span>
         <input
           id="email"

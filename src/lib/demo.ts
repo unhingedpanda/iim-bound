@@ -6,14 +6,8 @@
 import type { DrillState } from "@/components/DrillBoard";
 import type { RunCell } from "@/components/TodayView";
 import type { Mock } from "@/lib/data";
-import { addDays, daysBetween, todayISO } from "@/lib/dates";
-import { DEFAULT_DRILLS, type Drill } from "@/lib/plan";
-
-export const DEMO_START_OFFSET = -27;
-
-export function demoToday() {
-  return todayISO();
-}
+import { addDays, daysBetween } from "@/lib/dates";
+import { COVERAGE_SOLID, DEFAULT_DRILLS, type Drill } from "@/lib/plan";
 
 export function demoDrillDefs(): Drill[] {
   return DEFAULT_DRILLS.map((d, i) => ({ ...d, id: `demo-drill-${i}` }));
@@ -121,11 +115,18 @@ export function demoMocks(today: string): Mock[] {
 
 export type DemoTopic = { id: number; section: string; name: string; confidence: number };
 
-/** Confidence spread that looks like real, uneven progress. */
+/**
+ * Confidence spread that looks like real, uneven progress.
+ *
+ * The ceiling is COVERAGE_SOLID: the sample account is rated, and "Solid" is
+ * the top of the scale. It used to hold 3s, which the old four-button row
+ * painted as "Automatic" — a label that meant "never rated" while sitting at
+ * the top of the rating scale, which is what made the sample data unreadable.
+ */
 export function demoConfidence(topicId: number, section: string): number {
   const bias = section === "QA" ? 0 : section === "VARC" ? 1 : -1;
-  const spread = [3, 2, 2, 1, 3, 0, 2, 1, 2, 3, 1, 0, 2, 2, 1, 3];
-  return Math.max(0, Math.min(3, (spread[topicId % spread.length] ?? 1) + bias));
+  const spread = [2, 2, 2, 1, 2, 0, 2, 1, 2, 2, 1, 0, 2, 2, 1, 2];
+  return Math.max(0, Math.min(COVERAGE_SOLID, (spread[topicId % spread.length] ?? 1) + bias));
 }
 
 export type DemoMistake = {

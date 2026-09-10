@@ -1,10 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { safeNext } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/today";
+  // Only a path on this site. `next=//evil.com` is a protocol-relative URL, so
+  // `${origin}${next}` would have handed the browser to another host with a
+  // real magic link as the bait.
+  const next = safeNext(searchParams.get("next"));
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login?error=missing_code`);
@@ -17,5 +21,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=link_expired`);
   }
 
-  return NextResponse.redirect(`${origin}${next.startsWith("/") ? next : "/today"}`);
+  return NextResponse.redirect(`${origin}${next}`);
 }

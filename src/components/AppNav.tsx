@@ -2,21 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { APP_ROUTES } from "@/lib/routes";
 
-export const NAV = [
-  { href: "/today", label: "Today" },
-  { href: "/mocks", label: "Mocks" },
-  { href: "/syllabus", label: "Syllabus" },
-  { href: "/errors", label: "Errors" },
-  { href: "/settings", label: "Settings" },
-];
+/** The nav is the route registry rendered. It used to keep its own copy of the
+ *  list, which is how the proxy and the nav drifted apart. */
 
 export function DesktopNav() {
   const pathname = usePathname();
   return (
     <ul className="hidden flex-wrap items-baseline gap-x-1 sm:flex">
-      {NAV.map((item) => {
-        const active = pathname === item.href;
+      {APP_ROUTES.map((item) => {
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <li key={item.href}>
             <Link
@@ -44,14 +40,14 @@ export function MobileNav() {
       className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t-2 border-ink bg-paper sm:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      {NAV.map((item) => {
-        const active = pathname === item.href;
+      {APP_ROUTES.map((item) => {
+        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`py-3 text-center text-xs font-semibold ${
+            className={`py-3.5 text-center text-xs font-semibold ${
               active ? "bg-ink text-paper" : "text-ink-2"
             }`}
           >

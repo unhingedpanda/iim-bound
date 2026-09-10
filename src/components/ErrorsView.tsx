@@ -1,4 +1,5 @@
 import { addMistake, resolveMistake } from "@/app/actions";
+import { ActionForm } from "@/components/FormFeedback";
 import { shortDate } from "@/lib/dates";
 import { MISTAKE_CAUSES as CAUSES, SECTIONS } from "@/lib/plan";
 
@@ -87,8 +88,12 @@ export default function ErrorsView({
         <h2 id="add-h" className="display text-[clamp(24px,4vw,36px)]">
           Log a mistake
         </h2>
-        <form action={demo ? undefined : addMistake} className="mt-6">
-          <fieldset disabled={demo} className="grid gap-6 lg:grid-cols-[130px_170px_1fr]">
+        <ActionForm
+          action={addMistake}
+          className="mt-6 grid gap-6 lg:grid-cols-[130px_170px_1fr]"
+          noteClassName="lg:col-span-3"
+        >
+          <fieldset disabled={demo} className="contents">
             <label className="grid gap-1 text-sm text-ink-2">
               Section
               <select name="section" className={FIELD}>
@@ -143,7 +148,7 @@ export default function ErrorsView({
               Log it
             </button>
           </fieldset>
-        </form>
+        </ActionForm>
       </section>
 
       <section className="mt-16" aria-labelledby="log-h">
@@ -172,7 +177,7 @@ export default function ErrorsView({
                   <span className={m.resolved ? "text-ink-3 line-through" : ""}>{m.note}</span>
                 </div>
                 {demo ? null : (
-                  <form action={resolveMistake}>
+                  <ActionForm action={resolveMistake}>
                     <input type="hidden" name="id" value={m.id} />
                     <input type="hidden" name="resolved" value={String(!m.resolved)} />
                     <button
@@ -181,7 +186,7 @@ export default function ErrorsView({
                     >
                       {m.resolved ? "Reopen" : "Mark fixed"}
                     </button>
-                  </form>
+                  </ActionForm>
                 )}
               </li>
             ))

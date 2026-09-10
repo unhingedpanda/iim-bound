@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { supabaseEnv } from "./env";
 
 export async function createClient() {
@@ -29,9 +30,14 @@ export async function createClient() {
  * The signed-in user's id, or null. Uses getClaims(), which verifies the JWT
  * signature — getSession() reads storage without revalidating and must never
  * gate access on the server.
+ *
+ * Wrapped in cache() because one render asks repeatedly: the layout, the page,
+ * and every function in data.ts that scopes a query. Uncached, that was a
+ * fresh client and a fresh signature verification per call site. React scopes
+ * the memo to the request, so concurrent requests never share an answer.
  */
-export async function currentUserId() {
+export const currentUserId = cache(async (): Promise<string | null> => {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   return data?.claims?.sub ?? null;
-}
+});

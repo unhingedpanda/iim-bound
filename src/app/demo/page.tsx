@@ -1,5 +1,6 @@
 import TodayView from "@/components/TodayView";
-import { addDays, longDate, todayISO, weekdayIndex } from "@/lib/dates";
+import { addDays, longDate, weekdayIndex } from "@/lib/dates";
+import { today } from "@/lib/day";
 import { demoDrillDefs, demoDrills, demoRun } from "@/lib/demo";
 import { DEFAULTS, phaseFor } from "@/lib/plan";
 
@@ -9,22 +10,25 @@ export const metadata = {
 };
 
 export default function DemoPage() {
-  const today = todayISO();
-  const start = addDays(today, -27);
+  const day = today();
+  const start = addDays(day, -27);
   const drillDefs = demoDrillDefs();
   const drills = demoDrills();
 
   return (
     <TodayView
-      today={today}
-      dateLabel={longDate(today)}
+      today={day}
+      dateLabel={longDate(day)}
       dayNumber={28}
       streak={12}
-      minutesToday={Object.values(drills).reduce((sum, d) => sum + d.minutes, 0)}
-      phase={phaseFor(today)}
+      summary={{
+        minutes: Object.values(drills).reduce((sum, d) => sum + d.minutes, 0),
+        done: Object.values(drills).filter((d) => d.done).length,
+      }}
+      phase={phaseFor(day)}
       drills={drills}
       drillDefs={drillDefs}
-      run={demoRun(start, DEFAULTS.examDate, today)}
+      run={demoRun(start, DEFAULTS.examDate, day)}
       leadingBlanks={weekdayIndex(start)}
       examDate={DEFAULTS.examDate}
       readOnly

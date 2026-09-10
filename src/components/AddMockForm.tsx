@@ -3,13 +3,14 @@
 import { useActionState } from "react";
 import { addMock } from "@/app/actions";
 import { PAPER } from "@/lib/cat";
+import { EMPTY_MOCK_FORM } from "@/lib/mock-form";
 import { SECTIONS } from "@/lib/plan";
 
 const FIELD =
   "w-full border-0 border-b-2 border-line bg-transparent py-2 text-base text-ink outline-none focus:border-ink";
 
 export default function AddMockForm({ today, demo = false }: { today: string; demo?: boolean }) {
-  const [state, action, isPending] = useActionState(addMock, { ok: false, error: null });
+  const [state, action, isPending] = useActionState(addMock, EMPTY_MOCK_FORM);
 
   return (
     <form action={demo ? undefined : action} className="mt-8">

@@ -8,11 +8,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "biome check src proxy.ts next.config.ts",
+    "lint": "biome check src scripts next.config.ts tests",
     "typecheck": "tsc --noEmit",
-    "format": "biome check --write src proxy.ts next.config.ts",
+    "format": "biome check --write src scripts next.config.ts tests",
     "check": "npm run lint && npm run typecheck && npm test",
-    "test": "node --experimental-strip-types src/lib/cat.test.ts"
+    "test": "node --experimental-strip-types src/lib/cat.test.ts && node --experimental-strip-types --import ./tests/resolver-loader.mjs --test tests/helpers.test.mjs",
+    "test:up": "supabase start",
+    "test:down": "supabase stop",
+    "test:e2e": "./tests/e2e/run.sh",
+    "test:browser": "./tests/browser/run.sh",
+    "test:all": "npm run check && npm run test:e2e && npm run test:browser"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
@@ -25,6 +30,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.12",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.10.1",
     "@types/react": "19.2.2",

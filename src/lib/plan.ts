@@ -50,6 +50,20 @@ export function dailyTarget(drills: Pick<Drill, "target_minutes">[]) {
   return drills.reduce((sum, d) => sum + d.target_minutes, 0);
 }
 
+/**
+ * The sort values for a list in its new order: 10, 20, 30 …
+ *
+ * Reordering used to swap the `sort` of two adjacent rows, which is a no-op
+ * when they are tied — the button appeared to do nothing and the list stayed
+ * put. Renumbering the whole list cannot fail that way, and it heals any tie
+ * it finds: after one click the values are distinct again.
+ */
+export const SORT_STEP = 10;
+
+export function nextSorts(count: number): number[] {
+  return Array.from({ length: count }, (_, i) => (i + 1) * SORT_STEP);
+}
+
 /** CAT's own structure — not user-editable. */
 export const SECTIONS = ["VARC", "DILR", "QA"] as const;
 export type Section = (typeof SECTIONS)[number];
@@ -69,7 +83,42 @@ export const MISTAKE_CAUSES = [
   { key: "missed", label: "Missed easy", fix: "You skipped one you could have solved." },
 ] as const;
 
-export const CONFIDENCE_LABELS = ["Untouched", "Shaky", "Solid", "Automatic"];
+/**
+ * How well you know a syllabus topic, as a rating you set by hand.
+ *
+ * `value` is carried on each level rather than inferred from array position.
+ * The previous version was a bare array of labels and the UI used the map index
+ * as the value, which is how a fourth label — "Automatic" — ended up meaning
+ * "rating 3", ranked above "Solid" and counted towards a "topics solid or
+ * better" total. Nothing computes a topic's coverage; you rate it, or you have
+ * not rated it yet, and the default already means the latter. So the model is
+ * three levels and the zero state is honestly named.
+ *
+ * 0 doubles as "no row yet", which is why it needs no seed and no backfill:
+ * an untouched topic and a stored 0 are the same fact.
+ */
+export const COVERAGE = [
+  { label: "Untouched", value: 0 },
+  { label: "Shaky", value: 1 },
+  { label: "Solid", value: 2 },
+] as const;
+
+export type Coverage = (typeof COVERAGE)[number]["value"];
+
+/** Everything at or above this counts towards the syllabus total. */
+export const COVERAGE_SOLID: Coverage = 2;
+
+/**
+ * A stored confidence, as a level this build understands.
+ *
+ * An early build shipped a fourth button that wrote 3, so a database may hold
+ * it. 3 was displayed as "Solid" already, so reading it as 2 is what those
+ * readers were seeing anyway — the label and the count agree afterwards, which
+ * they did not before.
+ */
+export function coverage(stored: number | null | undefined): Coverage {
+  return stored === 1 ? 1 : stored && stored >= COVERAGE_SOLID ? 2 : 0;
+}
 
 export type Phase = { from: string; to: string; title: string; detail: string };
 

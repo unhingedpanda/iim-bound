@@ -3,14 +3,14 @@ import type { DrillState } from "@/components/DrillBoard";
 import TodayView, { type RunCell } from "@/components/TodayView";
 import {
   currentStreak,
-  doneCount,
+  daySummary,
   getDrillRows,
   getDrills,
   getProfile,
   indexByDay,
-  minutesOn,
 } from "@/lib/data";
-import { addDays, daysBetween, longDate, todayISO, weekdayIndex } from "@/lib/dates";
+import { daysBetween, longDate, weekdayIndex } from "@/lib/dates";
+import { daysThrough, today } from "@/lib/day";
 import { phaseFor } from "@/lib/plan";
 import { currentUserId } from "@/lib/supabase/server";
 
@@ -21,32 +21,33 @@ export default async function TodayPage() {
   if (!userId) redirect("/login");
 
   const [profile, drillDefs] = await Promise.all([getProfile(userId), getDrills(userId)]);
-  const today = todayISO();
-  const windowStart = profile.started_on < today ? profile.started_on : today;
+  const day = today();
 
-  const rows = await getDrillRows(userId, windowStart, today);
-  const index = indexByDay(rows);
+  // The run starts when it started, or today for a start date still ahead.
+  const windowStart = profile.started_on < day ? profile.started_on : day;
+  const index = indexByDay(await getDrillRows(userId, windowStart, day));
 
   const drills: Record<string, DrillState> = {};
   for (const drill of drillDefs) {
-    const row = index.get(today)?.get(drill.slug);
+    const row = index.get(day)?.get(drill.slug);
     drills[drill.slug] = { minutes: row?.minutes ?? 0, done: row?.done ?? false };
   }
 
-  const totalDays = Math.max(1, daysBetween(windowStart, profile.exam_date));
-  const run: RunCell[] = Array.from({ length: totalDays }, (_, i) => {
-    const day = addDays(windowStart, i);
-    return { day, done: doneCount(day, index, drillDefs) };
-  });
+  // daysThrough() is inclusive, so the grid carries a square for the exam day
+  // itself — the one date the whole screen is counting down to.
+  const run: RunCell[] = daysThrough(windowStart, profile.exam_date).map((d) => ({
+    day: d,
+    done: daySummary(d, index, drillDefs).done,
+  }));
 
   return (
     <TodayView
-      today={today}
-      dateLabel={longDate(today)}
-      dayNumber={daysBetween(profile.started_on, today) + 1}
-      streak={currentStreak(today, profile.started_on, index, drillDefs, profile.streak_threshold)}
-      minutesToday={minutesOn(today, index)}
-      phase={phaseFor(today)}
+      today={day}
+      dateLabel={longDate(day)}
+      dayNumber={Math.max(1, daysBetween(profile.started_on, day) + 1)}
+      streak={currentStreak(day, profile.started_on, index, drillDefs, profile.streak_threshold)}
+      summary={daySummary(day, index, drillDefs)}
+      phase={phaseFor(day)}
       drills={drills}
       drillDefs={drillDefs}
       run={run}

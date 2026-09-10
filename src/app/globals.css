@@ -15,7 +15,6 @@
   --signal: #1b36ff;
   --signal-ink: #ffffff;
   --flag: #d63a1e;
-  --good: #1a7f4b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -30,7 +29,6 @@
     --signal: #6d7dff;
     --signal-ink: #07070a;
     --flag: #ff6a4d;
-    --good: #4ad395;
   }
 }
 
@@ -45,7 +43,6 @@
   --signal: #6d7dff;
   --signal-ink: #07070a;
   --flag: #ff6a4d;
-  --good: #4ad395;
 }
 
 @theme inline {
@@ -59,7 +56,6 @@
   --color-signal: var(--signal);
   --color-signal-ink: var(--signal-ink);
   --color-flag: var(--flag);
-  --color-good: var(--good);
 
   --font-display: var(--font-archivo), "Helvetica Neue", Arial, sans-serif;
   --font-body: var(--font-instrument), "Helvetica Neue", Arial, sans-serif;
@@ -115,6 +111,18 @@
   border-top: 1px solid var(--line);
 }
 
+/* The opening section of a page does not get its own rule.
+   The masthead already ends in a 4px bottom border, and the content's first
+   section used to open with one too — two near-identical rules 32px apart,
+   which every reader sees as a doubled line rather than as a system. The
+   rules deeper down the page are doing real work (they separate blocks), so
+   the fix is to suppress the redundant one at the seam, in one place, rather
+   than to remove the class from seven page heads by hand.
+   Lives in the app shell: /demo and /login have their own layouts. */
+main > section:first-child.rule-heavy {
+  border-top: 0;
+}
+
 :focus-visible {
   outline: 3px solid var(--signal);
   outline-offset: 2px;
@@ -142,7 +150,23 @@
 
 @media (prefers-reduced-motion: no-preference) {
   .meter > span {
-    transition: transform 0.25s ease;
+    transition:
+      transform 0.25s var(--ease-out),
+      background-color 0.25s var(--ease-out);
+  }
+}
+
+/* One square of the run: a day, shaded by how much of it was done. The
+   custom property is what moves, so the state change is legible without
+   anything about the layout changing. */
+.run-square {
+  display: block;
+  background: color-mix(in oklab, var(--ink) calc(var(--fill, 0) * 100%), var(--paper-3));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .run-square {
+    transition: --fill 420ms var(--ease-out);
   }
 }
 
@@ -160,10 +184,32 @@ dd,
 }
 
 /* ------------------------------------------------------------------
-   Motion. One entrance per screen and one drawn line, nothing else.
-   Every animation ends at the resting state, so the page is correct
-   with motion disabled and correct in a still frame.
+   Motion. One entrance per screen, one drawn line, and the handful of
+   state changes worth marking. Every animation ends at the resting
+   state, so the page is correct with motion disabled and correct in a
+   still frame.
+
+   Two rules hold for everything below:
+   - Only transform, opacity and --fill move. Nothing that triggers
+     layout, so motion never costs a reflow.
+   - Reduced motion means gentler, not absent. An instant change is
+     still a change the eye has to re-find; it just arrives quicker.
    ------------------------------------------------------------------ */
+
+/* Registered so the run grid can interpolate it as a number. Without
+   this a custom property is an opaque string and snaps between values. */
+@property --fill {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+:root {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-rise: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   @keyframes rise {
     from {
@@ -173,7 +219,7 @@ dd,
   }
 
   main > section {
-    animation: rise 0.38s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+    animation: rise 0.38s var(--ease-rise) both;
   }
   main > section:nth-child(2) {
     animation-delay: 0.05s;
@@ -194,6 +240,78 @@ dd,
   .trace {
     stroke-dasharray: 2000;
     animation: draw 1.1s cubic-bezier(0.3, 0.8, 0.3, 1) 0.15s both;
+  }
+
+  /* A drill being ticked off: two quick beats and out of the way. The
+     signal colour arriving is the news, not the size of the box. */
+  @keyframes pop {
+    40% {
+      transform: scale(1.14);
+    }
+  }
+
+  .pop {
+    animation: pop 260ms var(--ease-out);
+  }
+
+  /* A square of the run filling in. */
+  @keyframes settle {
+    from {
+      opacity: 0.55;
+      transform: scale(1.5);
+    }
+  }
+
+  .settle {
+    animation: settle 340ms var(--ease-rise) both;
+  }
+
+  /* The streak moving. It changes at most once a day, so it is allowed to
+     be the one thing on this screen that takes a beat. */
+  @keyframes streak {
+    35% {
+      transform: scale(1.08);
+    }
+  }
+
+  .streak-mark {
+    animation: streak 620ms var(--ease-out);
+    transform-origin: left center;
+  }
+}
+
+/* A failed write arriving. Entrance only: dismissing removes the note
+   from the tree, so the exit is the disappearance itself. */
+.note-in {
+  animation: note-in 200ms var(--ease-out) both;
+}
+
+@keyframes note-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Gentler, not gone: the same changes arrive without travel, so nothing
+     crosses the screen but nothing silently teleports either. */
+  main > section,
+  .pop,
+  .settle,
+  .streak-mark,
+  .trace {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
+  }
+
+  .note-in {
+    animation: none;
+  }
+
+  .meter > span,
+  .run-square {
+    transition-duration: 1ms;
   }
 }
 

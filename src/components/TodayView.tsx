@@ -1,18 +1,17 @@
 import DrillBoard, { type DrillState } from "@/components/DrillBoard";
+import RunBoard from "@/components/RunBoard";
+import StreakMark from "@/components/StreakMark";
 import { longDate } from "@/lib/dates";
 import { type Drill, dailyTarget, type Phase } from "@/lib/plan";
 
 export type RunCell = { day: string; done: number };
-
-/** Stable keys for the leading weekday offset cells. */
-const PAD_KEYS = ["pad-mon", "pad-tue", "pad-wed", "pad-thu", "pad-fri", "pad-sat"];
 
 export default function TodayView({
   today,
   dateLabel,
   dayNumber,
   streak,
-  minutesToday,
+  summary,
   phase,
   drills,
   drillDefs,
@@ -25,7 +24,7 @@ export default function TodayView({
   dateLabel: string;
   dayNumber: number;
   streak: number;
-  minutesToday: number;
+  summary: { minutes: number; done: number };
   phase: Phase | null;
   drills: Record<string, DrillState>;
   drillDefs: Drill[];
@@ -34,6 +33,9 @@ export default function TodayView({
   examDate: string;
   readOnly?: boolean;
 }) {
+  const target = dailyTarget(drillDefs);
+  const elapsed = run.filter((cell) => cell.day <= today).length;
+  const logged = run.filter((cell) => cell.day <= today && cell.done > 0).length;
   return (
     <main>
       <section className="rule-heavy mt-8 pt-5">
@@ -48,15 +50,15 @@ export default function TodayView({
           <dl className="flex gap-10">
             <div>
               <dt className="text-sm text-ink-3">Streak</dt>
-              <dd className="display text-[clamp(32px,6vw,60px)]">{streak}</dd>
+              <dd className="display text-[clamp(32px,6vw,60px)]">
+                <StreakMark streak={streak} />
+              </dd>
             </div>
             <div>
               <dt className="text-sm text-ink-3">Minutes today</dt>
               <dd className="display text-[clamp(32px,6vw,60px)]">
-                {minutesToday}
-                {dailyTarget(drillDefs) > 0 ? (
-                  <span className="text-[0.4em] text-ink-3">/{dailyTarget(drillDefs)}</span>
-                ) : null}
+                {summary.minutes}
+                {target > 0 ? <span className="text-[0.4em] text-ink-3">/{target}</span> : null}
               </dd>
             </div>
           </dl>
@@ -87,35 +89,19 @@ export default function TodayView({
         </div>
 
         <div className="mt-6 overflow-x-auto pb-1">
-          <div
-            className="grid w-max grid-flow-col grid-rows-7 gap-[4px]"
-            role="img"
-            aria-label={`Daily completion up to ${longDate(examDate)}`}
-          >
-            {PAD_KEYS.slice(0, leadingBlanks).map((key) => (
-              <span key={key} aria-hidden="true" className="size-[15px]" />
-            ))}
-            {run.map(({ day, done }) => {
-              const level = done / Math.max(1, drillDefs.length);
-              const future = day > today;
-              return (
-                <span
-                  key={day}
-                  title={`${day} — ${done} of ${drillDefs.length}`}
-                  className="size-[15px]"
-                  style={{
-                    background:
-                      level > 0
-                        ? `color-mix(in oklab, var(--ink) ${Math.round(level * 100)}%, var(--paper-3))`
-                        : "var(--paper-3)",
-                    outline: day === today ? "2px solid var(--signal)" : undefined,
-                    outlineOffset: day === today ? "1px" : undefined,
-                    opacity: future ? 0.4 : 1,
-                  }}
-                />
-              );
-            })}
-          </div>
+          {/*
+            The grid is a picture of the run, so it is described rather than
+            announced cell by cell — but a picture with no caption helps nobody.
+            The summary below carries the same facts for anyone not looking at
+            it: days logged, days elapsed, and what is left.
+          */}
+          <RunBoard
+            run={run}
+            drills={drillDefs.length}
+            today={today}
+            leadingBlanks={leadingBlanks}
+            label={`${logged} of ${elapsed} days logged, one square a day from ${longDate(run[0]?.day ?? today)} to ${longDate(examDate)}`}
+          />
         </div>
 
         <div className="mt-4 flex items-center gap-3 text-xs text-ink-3">
@@ -134,6 +120,11 @@ export default function TodayView({
           ))}
           <span>All {drillDefs.length}</span>
         </div>
+
+        <p className="mt-4 max-w-[70ch] text-sm text-ink-2">
+          {logged} of {elapsed} days logged since {longDate(run[0]?.day ?? today)} — {summary.done}{" "}
+          of {drillDefs.length} drills done today.
+        </p>
       </section>
     </main>
   );

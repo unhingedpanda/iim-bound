@@ -1,5 +1,6 @@
 import Link from "next/link";
 import LoginForm from "@/components/LoginForm";
+import { safeNext } from "@/lib/routes";
 import { supabaseConfigured } from "@/lib/supabase/env";
 
 export const metadata = { title: "Sign in · IIM Bound" };
@@ -10,19 +11,19 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const next = params.next?.startsWith("/") ? params.next : "/today";
+  const next = safeNext(params.next);
 
   return (
     <main className="mx-auto grid max-w-[1200px] gap-10 px-6 py-12 lg:min-h-dvh lg:grid-cols-2 lg:items-center lg:gap-20">
       <div>
         <Link href="/" className="display text-[clamp(40px,8vw,88px)] block">
-          CAT
+          IIM
           <br />
-          Register
+          Bound
         </Link>
         <p className="mt-6 max-w-[42ch] text-lg text-ink-2">
-          Four drills a day, a mock log that names your weakest section, and a syllabus you can
-          actually see the holes in.
+          Drills with a timer behind each one, a mock log that names your weakest section, and a
+          syllabus you can actually see the holes in.
         </p>
       </div>
 

@@ -1,7 +1,8 @@
 import type { MockScores } from "@/lib/cat";
-import { summarise } from "@/lib/cat";
-import { addDays, daysBetween, todayISO } from "@/lib/dates";
+import { addDays, daysBetween } from "@/lib/dates";
+import { today } from "@/lib/day";
 import { DEFAULT_DRILLS, DEFAULTS, type Drill } from "@/lib/plan";
+import { read } from "@/lib/server/writes";
 import { createClient } from "@/lib/supabase/server";
 
 export type Profile = {
@@ -37,24 +38,25 @@ export type Mock = MockScores & {
 const MOCK_COLUMNS =
   "id, taken_on, series, varc, dilr, qa, overall, varc_attempted, varc_correct, dilr_attempted, dilr_correct, qa_attempted, qa_correct, takeaway, reviewed, reviewed_on";
 
+/* ------------------------------------------------------------------ profile */
+
 /** Reads the profile, creating it on first sign-in. */
 export async function getProfile(userId: string): Promise<Profile> {
+  const existing = await read<Profile | null>(
+    "profile",
+    (db) => db.from("profiles").select(PROFILE_COLUMNS).eq("id", userId).maybeSingle(),
+    null,
+  );
+  if (existing) return existing;
+
   const supabase = await createClient();
-
-  const { data } = await supabase
-    .from("profiles")
-    .select(PROFILE_COLUMNS)
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (data) return data as Profile;
 
   // Two requests can race here on first sign-in (the page and its prefetch),
   // so creation has to be idempotent rather than check-then-insert.
   const { error } = await supabase
     .from("profiles")
     .upsert(
-      { id: userId, exam_date: DEFAULTS.examDate, started_on: todayISO() },
+      { id: userId, exam_date: DEFAULTS.examDate, started_on: today() },
       { onConflict: "id", ignoreDuplicates: true },
     );
 
@@ -70,39 +72,56 @@ export async function getProfile(userId: string): Promise<Profile> {
   return profile as Profile;
 }
 
-/** The user's drills, seeded with the defaults the first time. */
+/* ------------------------------------------------------------------- drills */
+
+/**
+ * The user's drills, seeded with the defaults the first time.
+ *
+ * Seeding returns the rows rather than reading them back. The read-back was
+ * the bug behind an empty board on a brand-new account: the write landed, the
+ * read that followed in the same request sometimes did not see it, and the
+ * page rendered "All 0" with a 0-minute target until the next refresh. An
+ * upsert whose update assigns one of its own conflict columns is a no-op for
+ * rows that already exist, so this cannot overwrite a rename or a retimed
+ * target — and it hands back the defaults on the way in.
+ */
 export async function getDrills(userId: string): Promise<Drill[]> {
   const supabase = await createClient();
 
-  const read = async () =>
-    supabase
-      .from("user_drills")
-      .select("id, slug, label, blurb, target_minutes, sort")
-      .eq("user_id", userId)
-      .eq("archived", false)
-      .order("sort");
+  const { data } = await supabase
+    .from("user_drills")
+    .select("id, slug, label, blurb, target_minutes, sort")
+    .eq("user_id", userId)
+    .eq("archived", false)
+    .order("sort");
 
-  const { data } = await read();
   if (data?.length) return data as Drill[];
 
-  await supabase.from("user_drills").upsert(
-    DEFAULT_DRILLS.map((d) => ({ ...d, user_id: userId })),
-    { onConflict: "user_id,slug", ignoreDuplicates: true },
-  );
+  const { data: seeded } = await supabase
+    .from("user_drills")
+    .upsert(
+      DEFAULT_DRILLS.map((d) => ({ ...d, user_id: userId })),
+      { onConflict: "user_id,slug" },
+    )
+    .select("id, slug, label, blurb, target_minutes, sort")
+    .eq("archived", false)
+    .order("sort");
 
-  const { data: seeded } = await read();
   return (seeded ?? []) as Drill[];
 }
 
 export async function getDrillRows(userId: string, from: string, to: string): Promise<DrillRow[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("drill_log")
-    .select("on_day, drill_key, minutes, done")
-    .eq("user_id", userId)
-    .gte("on_day", from)
-    .lte("on_day", to);
-  return (data ?? []) as DrillRow[];
+  return read<DrillRow[]>(
+    "drill rows",
+    (db) =>
+      db
+        .from("drill_log")
+        .select("on_day, drill_key, minutes, done")
+        .eq("user_id", userId)
+        .gte("on_day", from)
+        .lte("on_day", to),
+    [],
+  );
 }
 
 export type DayMap = Map<string, Map<string, DrillRow>>;
@@ -110,28 +129,56 @@ export type DayMap = Map<string, Map<string, DrillRow>>;
 export function indexByDay(rows: DrillRow[]): DayMap {
   const map: DayMap = new Map();
   for (const row of rows) {
-    if (!map.has(row.on_day)) map.set(row.on_day, new Map());
-    map.get(row.on_day)?.set(row.drill_key, row);
+    let day = map.get(row.on_day);
+    if (!day) {
+      day = new Map();
+      map.set(row.on_day, day);
+    }
+    day.set(row.drill_key, row);
   }
   return map;
 }
 
-export function doneCount(day: string, index: DayMap, drills: Drill[]): number {
+/**
+ * Today's numbers, always over the user's *current* drills.
+ *
+ * Minutes and completions have to be read the same way or the header lies:
+ * a drill you archived keeps its logged rows forever (that is the point of
+ * archiving rather than deleting), so summing the day's rows counted minutes
+ * whose target had already left the denominator — "165 / 85 minutes" on a
+ * screen that promised a 85-minute day. Both figures now ignore keys that are
+ * no longer on the board, and the archived time stays visible on the drill
+ * itself in Settings.
+ */
+export function daySummary(
+  day: string,
+  index: DayMap,
+  drills: Drill[],
+): { minutes: number; done: number } {
   const entries = index.get(day);
-  if (!entries) return 0;
-  return drills.reduce((n, drill) => n + (entries.get(drill.slug)?.done ? 1 : 0), 0);
+  if (!entries || !drills.length) return { minutes: 0, done: 0 };
+
+  let minutes = 0;
+  let done = 0;
+  for (const drill of drills) {
+    const row = entries.get(drill.slug);
+    if (!row) continue;
+    minutes += row.minutes;
+    if (row.done) done += 1;
+  }
+  return { minutes, done };
 }
 
-export function minutesOn(day: string, index: DayMap): number {
-  const entries = index.get(day);
-  if (!entries) return 0;
-  let total = 0;
-  for (const row of entries.values()) total += row.minutes;
-  return total;
+export function doneCount(day: string, index: DayMap, drills: Drill[]): number {
+  return daySummary(day, index, drills).done;
+}
+
+export function minutesOn(day: string, index: DayMap, drills: Drill[]): number {
+  return daySummary(day, index, drills).minutes;
 }
 
 export function currentStreak(
-  today: string,
+  day: string,
   startedOn: string,
   index: DayMap,
   drills: Drill[],
@@ -143,7 +190,7 @@ export function currentStreak(
   if (!drills.length) return 0;
   const needed = Math.min(threshold, drills.length);
   let streak = 0;
-  let cursor = today;
+  let cursor = day;
   while (cursor >= startedOn && doneCount(cursor, index, drills) >= needed) {
     streak += 1;
     cursor = addDays(cursor, -1);
@@ -151,47 +198,19 @@ export function currentStreak(
   return streak;
 }
 
+/* -------------------------------------------------------------------- mocks */
+
 export async function getMocks(userId: string): Promise<Mock[]> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("mocks")
-    .select(MOCK_COLUMNS)
-    .eq("user_id", userId)
-    .order("taken_on", { ascending: true });
-  return (data ?? []) as Mock[];
-}
-
-/**
- * Which section is dragging the overall down, over the last few mocks. Works
- * off the summarised percentile, so a mock logged as raw marks counts too.
- */
-export function weakestSection(mocks: Mock[]): { section: string; average: number } | null {
-  const recent = mocks.slice(-3);
-  if (!recent.length) return null;
-
-  const totals = new Map<string, number[]>();
-  for (const mock of recent) {
-    for (const s of summarise(mock).sections) {
-      if (s.percentile === null) continue;
-      totals.set(s.section, [...(totals.get(s.section) ?? []), s.percentile]);
-    }
-  }
-
-  const averages = [...totals].map(([section, values]) => ({
-    section,
-    average: values.reduce((a, b) => a + b, 0) / values.length,
-  }));
-
-  if (!averages.length) return null;
-  return averages.reduce((worst, s) => (s.average < worst.average ? s : worst));
-}
-
-/** Mocks sat in the last `days` days — the cadence check. */
-export function mocksInLast(mocks: Mock[], today: string, days: number): number {
-  const from = addDays(today, -(days - 1));
-  return mocks.filter((m) => m.taken_on >= from && m.taken_on <= today).length;
+  return read<Mock[]>(
+    "mocks",
+    (db) =>
+      db.from("mocks").select(MOCK_COLUMNS).eq("user_id", userId).order("taken_on", {
+        ascending: true,
+      }),
+    [],
+  );
 }
 
 export function daysLeft(profile: Profile): number {
-  return Math.max(0, daysBetween(todayISO(), profile.exam_date));
+  return Math.max(0, daysBetween(today(), profile.exam_date));
 }

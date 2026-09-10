@@ -4,6 +4,22 @@ const W = 720;
 const H = 260;
 const PAD = { left: 4, right: 68, top: 22, bottom: 30 };
 
+/**
+ * The axis is in log-odds, not percentile.
+ *
+ * Percentile points are not equally far apart: 95 → 97 is a bigger move in
+ * rank than 89 → 91, and 97 → 99 is bigger again. On a linear axis the whole
+ * story of an improving logbook — the last two points — flattens into a line
+ * that looks like nothing happened. The logit stretches exactly the region
+ * that matters and leaves the middle roughly as it was.
+ */
+const clamp = (p: number) => Math.min(99.99, Math.max(0.01, p));
+const logit = (p: number) => Math.log(clamp(p) / (100 - clamp(p)));
+const unlogit = (l: number) => (100 * Math.exp(l)) / (1 + Math.exp(l));
+
+/** Smallest span the axis will show, so one point is not the whole chart. */
+const MIN_SPAN = 12;
+
 export type ChartPoint = {
   id: string;
   taken_on: string;
@@ -27,17 +43,25 @@ export default function MockChart({
     .sort((a, b) => a - b);
 
   // Scale to the data and the reference lines rather than a fixed 50-100, or
-  // every real trace sits squashed against the top of the box.
+  // every real trace sits squashed against the top of the box. A floor on the
+  // span stops a flat run of mocks from collapsing into a single band.
   const values = [...points.map((p) => p.percentile), ...lines];
-  const LO = values.length ? Math.max(0, Math.floor(Math.min(...values) - 3)) : 50;
-  const HI = values.length ? Math.min(100, Math.ceil(Math.max(...values) + 1)) : 100;
+  const low = values.length ? Math.min(...values) : 50;
+  const high = values.length ? Math.max(...values) : 100;
+  const span = Math.max(MIN_SPAN, high - low + 2);
+  const LO = Math.max(0, Math.min(low - 1, 100 - span));
+  const HI = Math.min(100, Math.max(high + 1, LO + span));
+
+  const loL = logit(LO);
+  const hiL = logit(HI);
 
   const x0 = PAD.left;
   const x1 = W - PAD.right;
   const y0 = PAD.top;
   const y1 = H - PAD.bottom;
 
-  const yOf = (p: number) => y1 - ((Math.min(HI, Math.max(LO, p)) - LO) / (HI - LO)) * (y1 - y0);
+  const yOf = (p: number) =>
+    y1 - ((logit(Math.min(HI, Math.max(LO, p))) - loL) / (hiL - loL)) * (y1 - y0);
   const xOf = (i: number) =>
     points.length < 2 ? (x0 + x1) / 2 : x0 + (i / (points.length - 1)) * (x1 - x0);
 
@@ -46,6 +70,8 @@ export default function MockChart({
     .join(" ");
 
   const last = points.length ? points[points.length - 1] : null;
+  // Gridlines at even percentile steps across the visible band.
+  const ticks = [LO, unlogit((loL + hiL) / 2), HI].map((v) => Math.round(v * 10) / 10);
 
   return (
     <svg
@@ -82,9 +108,12 @@ export default function MockChart({
         </g>
       ))}
       <line x1={x0} y1={y1} x2={x1} y2={y1} stroke="var(--line)" strokeWidth={1} />
-      <text x={x1 + 8} y={y1 + 4} fill="var(--ink-3)" fontSize="12">
-        {LO}
-      </text>
+      {/* The band this trace is drawn in, so a flat run cannot read as a collapse. */}
+      {ticks.map((t) => (
+        <text key={t} x={x1 + 8} y={yOf(t) + 4} fill="var(--ink-3)" fontSize="12">
+          {t}
+        </text>
+      ))}
 
       {points.length === 0 ? (
         <text x={x0} y={(y0 + y1) / 2} fill="var(--ink-3)" fontSize="14">

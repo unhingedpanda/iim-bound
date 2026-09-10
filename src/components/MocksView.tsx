@@ -3,20 +3,29 @@ import AddMockForm from "@/components/AddMockForm";
 import MockChart, { type ChartPoint } from "@/components/MockChart";
 import {
   attemptDiagnosis,
-  estimatePercentile,
+  estimate,
   MARK_CORRECT,
   netScore,
   PAPER,
+  paperMarks,
   scoreForPercentile,
   summarise,
   TOTAL_MARKS,
 } from "@/lib/cat";
 import type { Mock } from "@/lib/data";
-import { daysBetween, shortDate, todayISO } from "@/lib/dates";
+import { daysBetween, shortDate } from "@/lib/dates";
+import { latestLoggableDay, today } from "@/lib/day";
 import { mockCadence, SECTIONS, type Section } from "@/lib/plan";
 
 function pct(n: number | null) {
   return n === null ? "—" : n.toFixed(2);
+}
+
+/** Says out loud when a figure is not a reading off the published curve. */
+function basisNote(basis: "curve" | "below" | "ceiling" | null): string | null {
+  if (basis === "ceiling") return "past the top of the published curve — treat as a floor";
+  if (basis === "below") return "below the lowest published anchor — a rough floor, not a rank";
+  return null;
 }
 
 /** Averages the last few mocks per section, then reads the same diagnosis off them. */
@@ -32,6 +41,7 @@ function sectionForm(mocks: Mock[], section: Section, targetPercentile: number) 
   const attempted = rows.reduce((s, r) => s + r.a, 0) / rows.length;
   const correct = rows.reduce((s, r) => s + r.c, 0) / rows.length;
   const net = netScore(attempted, correct);
+  const derived = estimate(section, net);
 
   return {
     section,
@@ -40,7 +50,8 @@ function sectionForm(mocks: Mock[], section: Section, targetPercentile: number) 
     correct,
     net,
     accuracy: attempted > 0 ? correct / attempted : 0,
-    percentile: estimatePercentile(section, net),
+    percentile: derived?.percentile ?? null,
+    basis: derived?.basis ?? null,
     diagnosis: attemptDiagnosis(section, attempted, correct, targetPercentile),
   };
 }
@@ -58,7 +69,7 @@ export default function MocksView({
   daysLeft: number;
   demo?: boolean;
 }) {
-  const today = todayISO();
+  const day = today();
   const latest = mocks.length ? mocks[mocks.length - 1] : null;
   const latestSummary = latest ? summarise(latest) : null;
 
@@ -68,13 +79,14 @@ export default function MocksView({
   const cadence = mockCadence(daysLeft);
   // Defensive against pre-existing future-dated rows: only past dates count.
   const lastWeek = mocks.filter((m) => {
-    const back = daysBetween(m.taken_on, today);
+    const back = daysBetween(m.taken_on, day);
     return back >= 0 && back < 7;
   }).length;
 
+  // Only whole papers belong on a whole-paper percentile chart.
   const points: ChartPoint[] = mocks
     .map((m) => ({ mock: m, summary: summarise(m) }))
-    .filter(({ summary }) => summary.percentile !== null)
+    .filter(({ summary }) => summary.complete && summary.percentile !== null)
     .map(({ mock, summary }) => ({
       id: mock.id,
       taken_on: mock.taken_on,
@@ -87,10 +99,13 @@ export default function MocksView({
     (s) => s !== null,
   );
 
-  // The gap, in the only unit you can act on: questions.
+  // The gap, in the only unit you can act on: questions. Only a whole paper has
+  // a net that means anything against a whole-paper target.
   const targetMarks = scoreForPercentile("OVERALL", targetPercentile);
   const gap =
-    latestSummary?.net != null && targetMarks != null ? targetMarks - latestSummary.net : null;
+    latestSummary?.complete && latestSummary.net != null && targetMarks != null
+      ? targetMarks - latestSummary.net
+      : null;
 
   return (
     <main className="pb-10">
@@ -99,9 +114,17 @@ export default function MocksView({
         <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
           <h1 className="display min-w-0 text-[clamp(40px,8vw,88px)]">
             {latestSummary?.net ?? "—"}
-            <span className="text-ink-3">/{TOTAL_MARKS}</span>
+            <span className="text-ink-3">
+              /
+              {latestSummary?.complete
+                ? TOTAL_MARKS
+                : paperMarks(latestSummary?.sectionsLogged ?? 0)}
+            </span>
             <span className="mt-3 block text-base font-semibold leading-tight tracking-normal sm:text-lg text-ink-2">
               net marks{latest ? ` · ${latest.series}` : " · no mock logged yet"}
+              {latestSummary && !latestSummary.complete && latestSummary.sectionsLogged > 0
+                ? ` · ${latestSummary.sectionsLogged} of 3 sections`
+                : ""}
             </span>
           </h1>
 
@@ -123,6 +146,9 @@ export default function MocksView({
                     <span className="text-ink-3">As reported by the series.</span>
                   )}
                 </p>
+                {basisNote(latestSummary.basis) ? (
+                  <p className="mt-2 text-sm text-ink-3">{basisNote(latestSummary.basis)}</p>
+                ) : null}
                 {gap != null ? (
                   <p className="mt-4 border-l-4 border-signal py-1 pl-4">
                     {gap > 0.005 ? (
@@ -161,7 +187,7 @@ export default function MocksView({
               {unreviewed.length} mock{unreviewed.length > 1 ? "s" : ""} unanalysed
             </span>{" "}
             — the oldest sat {(() => {
-              const daysAgo = Math.max(0, daysBetween(oldestUnreviewed.taken_on, today));
+              const daysAgo = Math.max(0, daysBetween(oldestUnreviewed.taken_on, day));
               if (daysAgo === 0) return "today";
               return `${daysAgo} day${daysAgo > 1 ? "s" : ""} ago`;
             })()}. Sitting a mock costs two hours; skipping the review wastes them.
@@ -206,6 +232,9 @@ export default function MocksView({
                       {pct(s.percentile)}
                     </span>
                   </div>
+                  {basisNote(s.basis) ? (
+                    <p className="mt-1 text-xs text-ink-3">{basisNote(s.basis)}</p>
+                  ) : null}
 
                   <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
                     <div>
@@ -355,7 +384,7 @@ export default function MocksView({
           for a series that reports one.
         </p>
 
-        <AddMockForm today={today} demo={demo} />
+        <AddMockForm today={latestLoggableDay()} demo={demo} />
       </section>
     </main>
   );

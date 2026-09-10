@@ -1,5 +1,6 @@
 import { addTopic, deleteTopic, setTopicConfidence } from "@/app/actions";
-import { CONFIDENCE_LABELS, SECTIONS } from "@/lib/plan";
+import { ActionForm } from "@/components/FormFeedback";
+import { COVERAGE, COVERAGE_SOLID, coverage, SECTIONS } from "@/lib/plan";
 
 export type Topic = {
   id: number;
@@ -15,10 +16,12 @@ export default function SyllabusView({
   demo = false,
 }: {
   topics: Topic[];
+  /** Stored confidence by topic id. Normalised on read, never on write. */
   confidence: Map<number, number>;
   demo?: boolean;
 }) {
-  const solid = topics.filter((t) => (confidence.get(t.id) ?? 0) >= 2).length;
+  const rated = (topicId: number) => coverage(confidence.get(topicId));
+  const solid = topics.filter((t) => rated(t.id) >= COVERAGE_SOLID).length;
 
   return (
     <main className="pb-10">
@@ -40,7 +43,7 @@ export default function SyllabusView({
 
       {SECTIONS.map((section) => {
         const sectionTopics = topics.filter((t) => t.section === section);
-        const sectionSolid = sectionTopics.filter((t) => (confidence.get(t.id) ?? 0) >= 2).length;
+        const sectionSolid = sectionTopics.filter((t) => rated(t.id) >= COVERAGE_SOLID).length;
         const pct = sectionTopics.length
           ? Math.round((sectionSolid / sectionTopics.length) * 100)
           : 0;
@@ -62,7 +65,7 @@ export default function SyllabusView({
 
             <ul className="mt-4">
               {sectionTopics.map((topic) => {
-                const level = confidence.get(topic.id) ?? 0;
+                const level = rated(topic.id);
                 return (
                   <li
                     key={topic.id}
@@ -78,32 +81,34 @@ export default function SyllabusView({
                     </span>
 
                     <div className="flex items-center gap-3">
-                      <form
-                        action={demo ? undefined : setTopicConfidence}
+                      <ActionForm
+                        action={setTopicConfidence}
                         className="flex flex-wrap items-center gap-1"
                       >
                         <input type="hidden" name="topic_id" value={topic.id} />
-                        {CONFIDENCE_LABELS.map((label, value) => (
-                          <button
-                            key={label}
-                            type="submit"
-                            name="confidence"
-                            value={value}
-                            disabled={demo}
-                            aria-pressed={level === value}
-                            className={`border-2 px-2.5 py-1 text-xs font-semibold transition-colors ${
-                              level === value
-                                ? "border-ink bg-ink text-paper"
-                                : "border-line text-ink-3 hover:border-ink-3"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </form>
+                        {/* The demo has no account behind it, so its controls are inert. */}
+                        <fieldset disabled={demo} className="contents">
+                          {COVERAGE.map(({ label, value }) => (
+                            <button
+                              key={label}
+                              type="submit"
+                              name="confidence"
+                              value={value}
+                              aria-pressed={level === value}
+                              className={`border-2 px-2.5 py-1 text-xs font-semibold transition-colors ${
+                                level === value
+                                  ? "border-ink bg-ink text-paper"
+                                  : "border-line text-ink-3 hover:border-ink-3"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </fieldset>
+                      </ActionForm>
 
                       {topic.user_id && !demo ? (
-                        <form action={deleteTopic}>
+                        <ActionForm action={deleteTopic}>
                           <input type="hidden" name="id" value={topic.id} />
                           <button
                             type="submit"
@@ -111,7 +116,7 @@ export default function SyllabusView({
                           >
                             Delete
                           </button>
-                        </form>
+                        </ActionForm>
                       ) : null}
                     </div>
                   </li>
@@ -119,10 +124,7 @@ export default function SyllabusView({
               })}
             </ul>
 
-            <form
-              action={demo ? undefined : addTopic}
-              className="mt-4 flex flex-wrap items-end gap-3"
-            >
+            <ActionForm action={addTopic} className="mt-4 flex flex-wrap items-end gap-3">
               <input type="hidden" name="section" value={section} />
               <label className="grid gap-1 text-xs text-ink-3">
                 Add a topic to {section}
@@ -141,7 +143,7 @@ export default function SyllabusView({
               >
                 Add
               </button>
-            </form>
+            </ActionForm>
           </section>
         );
       })}

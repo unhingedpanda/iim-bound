@@ -1,16 +1,11 @@
 import { redirect } from "next/navigation";
-import {
-  addDrill,
-  archiveDrill,
-  moveDrill,
-  restartRun,
-  updateDrill,
-  updateSettings,
-} from "@/app/actions";
+import { addDrill, archiveDrill, moveDrill, restartRun, updateDrill } from "@/app/actions";
+import { ActionForm } from "@/components/FormFeedback";
 import { getDrills, getProfile } from "@/lib/data";
 import { longDate } from "@/lib/dates";
 import { dailyTarget } from "@/lib/plan";
 import { currentUserId } from "@/lib/supabase/server";
+import ProfileForm from "./ProfileForm";
 
 export const metadata = { title: "Settings · IIM Bound" };
 
@@ -47,7 +42,11 @@ export default async function SettingsPage() {
         <ul className="mt-2">
           {drills.map((drill, i) => (
             <li key={drill.id} className="border-b border-line py-4">
-              <form action={updateDrill} className="grid gap-3 md:grid-cols-[1fr_1.4fr_110px_auto]">
+              <ActionForm
+                action={updateDrill}
+                className="grid gap-3 md:grid-cols-[1fr_1.4fr_110px_auto]"
+                noteClassName="md:col-span-4"
+              >
                 <input type="hidden" name="id" value={drill.id} />
                 <label className="grid gap-1 text-xs text-ink-3">
                   Name
@@ -76,39 +75,43 @@ export default async function SettingsPage() {
                     Save
                   </button>
                 </div>
-              </form>
+              </ActionForm>
 
               <div className="mt-2 flex flex-wrap gap-4 text-sm text-ink-3">
                 {i > 0 ? (
-                  <form action={moveDrill}>
+                  <ActionForm action={moveDrill}>
                     <input type="hidden" name="id" value={drill.id} />
                     <input type="hidden" name="direction" value="up" />
                     <button type="submit" className="underline underline-offset-4">
                       Move up
                     </button>
-                  </form>
+                  </ActionForm>
                 ) : null}
                 {i < drills.length - 1 ? (
-                  <form action={moveDrill}>
+                  <ActionForm action={moveDrill}>
                     <input type="hidden" name="id" value={drill.id} />
                     <input type="hidden" name="direction" value="down" />
                     <button type="submit" className="underline underline-offset-4">
                       Move down
                     </button>
-                  </form>
+                  </ActionForm>
                 ) : null}
-                <form action={archiveDrill}>
+                <ActionForm action={archiveDrill}>
                   <input type="hidden" name="id" value={drill.id} />
                   <button type="submit" className="underline underline-offset-4">
                     Remove
                   </button>
-                </form>
+                </ActionForm>
               </div>
             </li>
           ))}
         </ul>
 
-        <form action={addDrill} className="mt-6 grid gap-3 md:grid-cols-[1fr_1.4fr_110px_auto]">
+        <ActionForm
+          action={addDrill}
+          className="mt-6 grid gap-3 md:grid-cols-[1fr_1.4fr_110px_auto]"
+          noteClassName="md:col-span-4"
+        >
           <label className="grid gap-1 text-xs text-ink-3">
             New drill
             <input name="label" placeholder="Vocabulary" required className={FIELD} />
@@ -133,7 +136,7 @@ export default async function SettingsPage() {
               Add drill
             </button>
           </div>
-        </form>
+        </ActionForm>
 
         <p className="mt-3 text-sm text-ink-3">
           Removing a drill hides it from Today and keeps everything you already logged against it.
@@ -147,7 +150,11 @@ export default async function SettingsPage() {
           </h2>
         </div>
 
-        <form action={updateSettings} className="mt-6 grid max-w-[760px] gap-6 sm:grid-cols-2">
+        <ProfileForm
+          profile={profile}
+          className="mt-6 grid max-w-[760px] gap-6 sm:grid-cols-2"
+          noteClassName="sm:col-span-2"
+        >
           <label className="grid gap-1 text-sm text-ink-2">
             Name (optional)
             <input
@@ -229,7 +236,7 @@ export default async function SettingsPage() {
           >
             Save settings
           </button>
-        </form>
+        </ProfileForm>
       </section>
 
       <section className="mt-16" aria-labelledby="run-h">
@@ -243,11 +250,11 @@ export default async function SettingsPage() {
             Started {longDate(profile.started_on)}. Restarting moves the first square of the grid to
             today — your logged days and mocks are kept.
           </p>
-          <form action={restartRun}>
+          <ActionForm action={restartRun}>
             <button type="submit" className="border-2 border-ink px-5 py-3 text-sm font-semibold">
               Restart the run today
             </button>
-          </form>
+          </ActionForm>
         </div>
       </section>
     </main>

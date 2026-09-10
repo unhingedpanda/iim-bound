@@ -1,23 +1,9 @@
-/** All dates in this app are plain YYYY-MM-DD strings in the user's local day. */
-
 /**
- * This app's users are all in India, but the server runs on UTC — reading the
- * server's local day stamps 00:00–05:30 IST actions onto the previous day.
- * Pin "today" to Asia/Kolkata so drill logs, streaks and countdowns agree
- * with the wall clock the user actually lives by.
+ * Calendar arithmetic and labels for YYYY-MM-DD day strings.
+ *
+ * Arithmetic only. "What day is it" and "may I write to this day" live in
+ * @/lib/day, which owns the timezone and the tolerance window.
  */
-export function todayISO(): string {
-  // Assembled from parts rather than trusting a locale's field order, so no
-  // ICU version can silently rearrange the day.
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
 
 export function addDays(day: string, n: number): string {
   const d = new Date(`${day}T00:00:00Z`);
@@ -25,6 +11,7 @@ export function addDays(day: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Whole days from `from` to `to`; end-exclusive, so 1 Sep → 29 Nov is 89. */
 export function daysBetween(from: string, to: string): number {
   const a = new Date(`${from}T00:00:00Z`).getTime();
   const b = new Date(`${to}T00:00:00Z`).getTime();

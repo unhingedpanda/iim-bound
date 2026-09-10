@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { daysBetween, todayISO } from "@/lib/dates";
+import { daysBetween } from "@/lib/dates";
+import { today } from "@/lib/day";
 import { DEFAULT_DRILLS } from "@/lib/plan";
 import { SITE } from "@/lib/site";
 
 export default function Landing() {
-  const daysLeft = Math.max(0, daysBetween(todayISO(), SITE.defaultExamDate));
+  const daysLeft = Math.max(0, daysBetween(today(), SITE.defaultExamDate));
 
   return (
     <main className="mx-auto max-w-[1200px] px-6 pb-24 pt-8">
@@ -97,11 +98,11 @@ export default function Landing() {
           },
           {
             title: "Syllabus you can see through",
-            body: "Every topic rated untouched, shaky, solid or automatic. Coverage gaps stop being a feeling and start being a list.",
+            body: "Every topic rated untouched, shaky or solid. Coverage gaps stop being a feeling and start being a list.",
           },
           {
             title: "An error log with causes",
-            body: "Every mistake tagged concept, careless, misread, timing, selection or missed-easy — because only the first of those six is fixed by studying more.",
+            body: "Every mistake tagged concept, careless, misread, time, selection or missed-easy — because only the first of those six is fixed by studying more.",
           },
         ].map((card) => (
           <article key={card.title}>

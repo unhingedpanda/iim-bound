@@ -19,8 +19,18 @@ export const PAPER: Record<Section, { questions: number; minutes: number }> = {
 export const MARK_CORRECT = 3;
 export const MARK_WRONG = -1;
 
-export const TOTAL_QUESTIONS = 68;
-export const TOTAL_MARKS = TOTAL_QUESTIONS * MARK_CORRECT; // 204
+export const TOTAL_MARKS =
+  (PAPER.VARC.questions + PAPER.DILR.questions + PAPER.QA.questions) * MARK_CORRECT; // 204
+
+/**
+ * The most a paper could score over `sections` sections, so a partly-logged
+ * mock is shown against the right ceiling. A VARC-only row out of 204 reads as
+ * a bad paper rather than a sectional test.
+ */
+export function paperMarks(sections: number): number {
+  const ordered = (Object.keys(PAPER) as Section[]).slice(0, Math.max(0, Math.min(3, sections)));
+  return ordered.reduce((sum, s) => sum + PAPER[s].questions * MARK_CORRECT, 0);
+}
 
 /** [score, percentile] anchors, ascending. CAT 2025 actuals. */
 type Anchor = [number, number];
@@ -81,28 +91,53 @@ export function accuracy(attempted: number, correct: number): number | null {
 }
 
 /**
- * Linear interpolation between published anchors. Below the lowest anchor it
- * runs a straight line down to zero; above the highest it flattens, because
- * nobody needs a fourth decimal place above 99.9.
+ * Percentiles are cut off at this score. Anyone past it is off the end of the
+ * published data, so the estimate stops pretending to a decimal place it does
+ * not have.
  */
-export function estimatePercentile(scope: Section | "OVERALL", score: number): number | null {
+export const TOP_ANCHOR = 99.9;
+
+/**
+ * Where an estimate comes from, so the interface can say.
+ *
+ * The old version reported one number for every input and left the reader to
+ * assume the curve covered it. It did not: below the lowest anchor it ran a
+ * straight line through the origin, which has no support in the data, and
+ * above the highest it clamped — so a VARC net of 56 marks, higher than the
+ * top anchor of 53, came back as a confident "99.9".
+ */
+export type Estimate = {
+  percentile: number;
+  basis: "curve" | "below" | "ceiling";
+};
+
+export function estimate(scope: Section | "OVERALL", score: number): Estimate | null {
   if (!Number.isFinite(score)) return null;
   const curve = CURVES[scope];
   const first = curve[0];
   const last = curve[curve.length - 1];
 
-  if (score <= 0) return 0;
-  if (score <= first[0]) return round2((score / first[0]) * first[1]);
-  if (score >= last[0]) return last[1];
+  if (score <= 0) return { percentile: 0, basis: "below" };
+  // Above the top anchor the honest answer is "at least this, and we stop
+  // guessing" — not a fourth decimal place invented from nothing.
+  if (score >= last[0]) return { percentile: last[1], basis: "ceiling" };
+  if (score <= first[0]) {
+    return { percentile: round2((score / first[0]) * first[1]), basis: "below" };
+  }
 
   for (let i = 1; i < curve.length; i += 1) {
     const [x0, y0] = curve[i - 1];
     const [x1, y1] = curve[i];
     if (score <= x1) {
-      return round2(y0 + ((score - x0) / (x1 - x0)) * (y1 - y0));
+      return { percentile: round2(y0 + ((score - x0) / (x1 - x0)) * (y1 - y0)), basis: "curve" };
     }
   }
-  return last[1];
+  return { percentile: last[1], basis: "ceiling" };
+}
+
+/** Just the number, for callers that only need the figure. */
+export function estimatePercentile(scope: Section | "OVERALL", score: number): number | null {
+  return estimate(scope, score)?.percentile ?? null;
 }
 
 /** The raw score a given percentile took, so a target can be shown in marks. */
@@ -235,13 +270,22 @@ export type SectionSummary = {
   /** Reported by the series where you have it, estimated from the score if not. */
   percentile: number | null;
   estimated: boolean;
+  /** Where an estimated figure came from; null when the series reported one. */
+  basis: Estimate["basis"] | null;
 };
 
 export type MockSummary = {
   sections: SectionSummary[];
+  /** Net marks, over whatever sections were filled in. Null when none were. */
   net: number | null;
+  /** How many sections carry attempts and corrects — 0 to 3. */
+  sectionsLogged: number;
+  /** True when every section has a score, so `net` is a whole paper. */
+  complete: boolean;
   percentile: number | null;
   estimated: boolean;
+  /** Where the estimate came from, or null when nothing was estimated. */
+  basis: Estimate["basis"] | null;
   /** True once there is enough in the row to say anything about the mock. */
   scored: boolean;
 };
@@ -252,6 +296,17 @@ const FIELDS = {
   QA: ["qa_attempted", "qa_correct", "qa"],
 } as const;
 
+/**
+ * What a mock row says, including the half-filled ones.
+ *
+ * A partly-logged mock used to summarise to nothing at all: `net` was only
+ * computed when all three sections were present, which meant a sectional test
+ * or a paper you abandoned showed as "no mock logged yet" in the hero while
+ * sitting in the log below it. A section you did log is a section you can
+ * learn from, so the totals now cover what was entered and `complete` says
+ * whether it was a whole paper. The one figure that stays whole-paper-only is
+ * the overall percentile, because the overall curve is a whole-paper curve.
+ */
 export function summarise(m: MockScores): MockSummary {
   const sections: SectionSummary[] = (Object.keys(FIELDS) as Section[]).map((section) => {
     const [aKey, cKey, pKey] = FIELDS[section];
@@ -260,6 +315,7 @@ export function summarise(m: MockScores): MockSummary {
     const reported = m[pKey];
     const hasScore = attempted !== null && correct !== null;
     const net = hasScore ? netScore(attempted, correct) : null;
+    const derived = net === null ? null : estimate(section, net);
 
     return {
       section,
@@ -267,19 +323,34 @@ export function summarise(m: MockScores): MockSummary {
       correct,
       net,
       accuracy: hasScore ? accuracy(attempted, correct) : null,
-      percentile: reported ?? (net === null ? null : estimatePercentile(section, net)),
-      estimated: reported === null && net !== null,
+      percentile: reported ?? derived?.percentile ?? null,
+      estimated: reported === null && derived !== null,
+      basis: reported === null ? (derived?.basis ?? null) : null,
     };
   });
 
-  const nets = sections.map((s) => s.net).filter((n): n is number => n !== null);
-  const net = nets.length === 3 ? nets.reduce((a, b) => a + b, 0) : null;
+  const scored = sections.filter((s) => s.net !== null);
+  const net = scored.length ? scored.reduce((sum, s) => sum + (s.net ?? 0), 0) : null;
+  const complete = scored.length === sections.length;
+
+  // The overall curve is calibrated against a whole paper, so a partial net
+  // would be compared to the wrong scale. Fall back to the section percentiles
+  // that were actually computed instead of inventing an overall one.
+  const overall =
+    m.overall !== null
+      ? { percentile: m.overall, basis: "curve" as const }
+      : complete && net !== null
+        ? estimate("OVERALL", net)
+        : null;
 
   return {
     sections,
     net,
-    percentile: m.overall ?? (net === null ? null : estimatePercentile("OVERALL", net)),
-    estimated: m.overall === null && net !== null,
+    sectionsLogged: scored.length,
+    complete,
+    percentile: overall?.percentile ?? null,
+    estimated: m.overall === null && overall !== null,
+    basis: m.overall === null ? (overall?.basis ?? null) : null,
     scored: net !== null || m.overall !== null,
   };
 }
