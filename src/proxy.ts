@@ -23,48 +23,72 @@ import { isAppPath } from "@/lib/routes";
  * convention relative to the app directory: with the app at src/app the file has
  * to be at src/proxy.ts. At the root it is not an error — it is silently
  * ignored, and every gated route renders its own redirect instead.
+ *
+ * When Clerk is not configured (no keys in the environment, e.g. a bare
+ * preview), the gate treats every visitor as signed out instead of crashing:
+ * app paths redirect to /login, which renders a friendly notice, and public
+ * pages render normally.
  */
 
-export default clerkMiddleware(async (auth, request: NextRequest) => {
-  const path = request.nextUrl.pathname;
+const HAS_KEYS = Boolean(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY,
+);
 
-  // Clerk's own handshake and asset routes pass straight through. Running the
-  // gate over them made Clerk's token refresh redirect into itself, which Clerk
-  // reports as "infinite redirect loop ... your keys do not match" — a message
-  // that sends you to the dashboard when the fault is here.
-  if (path.startsWith("/__clerk")) return NextResponse.next();
+const gate = HAS_KEYS
+  ? clerkMiddleware(async (auth, request: NextRequest) => {
+      const path = request.nextUrl.pathname;
 
-  const { userId } = await auth();
-  const signedIn = Boolean(userId);
+      // Clerk's own handshake and asset routes pass straight through. Running the
+      // gate over them made Clerk's token refresh redirect into itself, which Clerk
+      // reports as "infinite redirect loop ... your keys do not match" — a message
+      // that sends you to the dashboard when the fault is here.
+      if (path.startsWith("/__clerk")) return NextResponse.next();
 
-  const goToLogin = !signedIn && isAppPath(path);
-  const goToToday = signedIn && (path === "/" || path === "/login");
+      const { userId } = await auth();
+      const signedIn = Boolean(userId);
 
-  if (goToLogin || goToToday) {
-    const redirect = request.nextUrl.clone();
-    redirect.pathname = goToLogin ? "/login" : "/today";
-    redirect.search = "";
-    if (goToLogin) {
-      // Clerk preserves `redirect_url` across its own navigation between the
-      // sign-in and sign-up views, and honours it however the attempt
-      // completes — password, ticket or OAuth. It has never heard of a
-      // parameter called `next`, which is what this used to send: that value
-      // was dropped the moment someone clicked "Sign up" and ignored on the way
-      // back, so every deep link landed on the fallback and the promise to
-      // return you where you were going held for exactly one route — the one
-      // that happened to be the fallback. `path` is safe by construction here:
-      // it only reaches this branch when isAppPath() has already accepted it.
-      redirect.searchParams.set("redirect_url", path);
-    }
-    // A visitor holding no session must not be able to poison a shared cache
-    // with a redirect that a signed-in visitor would then be served.
-    return NextResponse.redirect(redirect, {
-      headers: { "Cache-Control": "private, no-store" },
-    });
-  }
+      const goToLogin = !signedIn && isAppPath(path);
+      const goToToday = signedIn && (path === "/" || path === "/login");
 
-  return NextResponse.next();
-});
+      if (goToLogin || goToToday) {
+        const redirect = request.nextUrl.clone();
+        redirect.pathname = goToLogin ? "/login" : "/today";
+        redirect.search = "";
+        if (goToLogin) {
+          // Clerk preserves `redirect_url` across its own navigation between the
+          // sign-in and sign-up views, and honours it however the attempt
+          // completes — password, ticket or OAuth. It has never heard of a
+          // parameter called `next`, which is what this used to send: that value
+          // was dropped the moment someone clicked "Sign up" and ignored on the way
+          // back, so every deep link landed on the fallback and the promise to
+          // return you where you were going held for exactly one route — the one
+          // that happened to be the fallback. `path` is safe by construction here:
+          // it only reaches this branch when isAppPath() has already accepted it.
+          redirect.searchParams.set("redirect_url", path);
+        }
+        // A visitor holding no session must not be able to poison a shared cache
+        // with a redirect that a signed-in visitor would then be served.
+        return NextResponse.redirect(redirect, {
+          headers: { "Cache-Control": "private, no-store" },
+        });
+      }
+
+      return NextResponse.next();
+    })
+  : (request: NextRequest) => {
+      const path = request.nextUrl.pathname;
+      if (isAppPath(path)) {
+        const redirect = request.nextUrl.clone();
+        redirect.pathname = "/login";
+        redirect.search = "";
+        return NextResponse.redirect(redirect, {
+          headers: { "Cache-Control": "private, no-store" },
+        });
+      }
+      return NextResponse.next();
+    };
+
+export default gate;
 
 export const config = {
   matcher: [

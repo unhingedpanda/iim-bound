@@ -18,6 +18,13 @@ const instrument = Instrument_Sans({
   display: "swap",
 });
 
+/**
+ * A publishable key is what ClerkProvider needs to not throw; a missing one
+ * (a bare preview with no Clerk configured) mounts the pages without Clerk,
+ * so the landing and demo render and the login page shows its notice.
+ */
+const PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 export const metadata: Metadata = {
   title: "IIM Bound",
   description:
@@ -28,11 +35,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${archivo.variable} ${instrument.variable}`}>
       <body>
-        <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
-          {children}
-          <Analytics />
-          <SpeedInsights />
-        </ClerkProvider>
+        {PUBLISHABLE_KEY ? (
+          <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+            {children}
+            <Analytics />
+            <SpeedInsights />
+          </ClerkProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );
