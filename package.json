@@ -5,7 +5,7 @@
   "license": "MIT",
   "description": "An open-source daily register for CAT preparation: drills, mocks, syllabus coverage and focus time.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "biome check src scripts next.config.ts tests",
