@@ -211,6 +211,48 @@ export async function getMocks(userId: string): Promise<Mock[]> {
   );
 }
 
+/* ------------------------------------------------------------ attention */
+
+/**
+ * Sections worth a look, for the nav dot.
+ *
+ * One extra query per page load, cached by Next for the few seconds between
+ * them — small price for "a mock sat two hours of my time and nothing has
+ * reviewed it" not going unnoticed.
+ */
+export async function readAttention(
+  userId: string,
+): Promise<Array<{ href: string; label: string }>> {
+  const supabase = await createClient();
+  const [{ count: unreviewed }, { count: openErrors }] = await Promise.all([
+    supabase
+      .from("mocks")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("reviewed", false),
+    supabase
+      .from("mistakes")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("resolved", false),
+  ]);
+
+  const attention: Array<{ href: string; label: string }> = [];
+  if (unreviewed && unreviewed > 0) {
+    attention.push({
+      href: "/mocks",
+      label: `${unreviewed} mock${unreviewed > 1 ? "s" : ""} unanalysed`,
+    });
+  }
+  if (openErrors && openErrors > 0) {
+    attention.push({
+      href: "/errors",
+      label: `${openErrors} open mistake${openErrors > 1 ? "s" : ""}`,
+    });
+  }
+  return attention;
+}
+
 export function daysLeft(profile: Profile): number {
   return Math.max(0, daysBetween(today(), profile.exam_date));
 }

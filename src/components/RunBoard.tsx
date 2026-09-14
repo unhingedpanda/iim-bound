@@ -14,6 +14,9 @@ import { useEffect, useRef, useState } from "react";
  * happens here is the reaction to that: a square whose level moved gets a
  * short flash, and the rest of the grid sits still. Nothing is deferred, so a
  * slow frame can never delay a number that is already correct.
+ *
+ * Each square is also a button: tapping one reads back what that day actually
+ * was — the date, how many drills were done, and how the picture was coloured.
  */
 export type RunSquare = { day: string; done: number };
 
@@ -44,6 +47,7 @@ export default function RunBoard({
 }) {
   const previous = useRef<Map<string, number> | null>(null);
   const [marked, setMarked] = useState<ReadonlySet<string>>(new Set());
+  const [selected, setSelected] = useState<RunSquare | null>(null);
 
   useEffect(() => {
     const before = previous.current;
@@ -65,34 +69,61 @@ export default function RunBoard({
     return () => window.clearTimeout(clear);
   }, [run]);
 
+  /** Reads a day back out loud for the tapped square. */
+  function describe(cell: RunSquare): string {
+    if (cell.day > today) return "not reached yet";
+    if (cell.done === 0) return "nothing logged";
+    return `${cell.done} of ${drills} drills done`;
+  }
+
+  const chosen = selected ?? run.find((cell) => cell.day === today) ?? null;
+
   return (
-    <div className="grid w-max grid-flow-col grid-rows-7 gap-[4px]" role="img" aria-label={label}>
-      {PAD_KEYS.slice(0, leadingBlanks).map((key) => (
-        <span key={key} aria-hidden="true" className="size-[15px]" />
-      ))}
-      {run.map(({ day, done }, i) => {
-        const level = levelOf(done, drills);
-        const future = day > today;
-        const marking = marked.has(day);
-        return (
-          <span
-            key={day}
-            title={`${day} — ${done} of ${drills}`}
-            className={`run-square size-[15px]${marking ? " settle" : ""}`}
-            style={
-              {
-                "--fill": level,
-                outline: day === today ? "2px solid var(--signal)" : undefined,
-                outlineOffset: day === today ? "1px" : undefined,
-                opacity: future ? 0.4 : 1,
-                // Staggered by weekday so a whole week arriving at once
-                // reads as a wave rather than a flicker.
-                animationDelay: marking ? `${(i % STAGGER_PERIOD) * STAGGER_MS}ms` : undefined,
-              } as React.CSSProperties
-            }
-          />
-        );
-      })}
+    <div>
+      <fieldset className="grid w-max grid-flow-col grid-rows-7 gap-[4px]" aria-label={label}>
+        {PAD_KEYS.slice(0, leadingBlanks).map((key) => (
+          <span key={key} aria-hidden="true" className="size-[15px]" />
+        ))}
+        {run.map((cell, i) => {
+          const { day, done } = cell;
+          const level = levelOf(done, drills);
+          const future = day > today;
+          const marking = marked.has(day);
+          const isSelected = selected?.day === day;
+          return (
+            <button
+              key={day}
+              type="button"
+              onClick={() => setSelected(isSelected ? null : cell)}
+              title={`${day} — ${describe(cell)}`}
+              aria-label={`${day}: ${describe(cell)}`}
+              aria-pressed={isSelected}
+              className={`run-square size-[15px]${marking ? " settle" : ""}`}
+              style={
+                {
+                  "--fill": level,
+                  outline: isSelected || day === today ? "2px solid var(--signal)" : undefined,
+                  outlineOffset: isSelected || day === today ? "1px" : undefined,
+                  opacity: future ? 0.4 : 1,
+                  // Staggered by weekday so a whole week arriving at once
+                  // reads as a wave rather than a flicker.
+                  animationDelay: marking ? `${(i % STAGGER_PERIOD) * STAGGER_MS}ms` : undefined,
+                } as React.CSSProperties
+              }
+            />
+          );
+        })}
+      </fieldset>
+
+      {/* The tapped day, read back under the grid. On first render it shows
+          today, which is the day a returning user most likely wants. */}
+      {chosen ? (
+        <p aria-live="polite" className="mt-3 border-l-2 border-signal pl-3 text-sm text-ink-2">
+          <span className="font-semibold text-ink">{chosen.day}</span>
+          {" — "}
+          {describe(chosen)}.
+        </p>
+      ) : null}
     </div>
   );
 }

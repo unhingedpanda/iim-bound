@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DesktopNav, MobileNav } from "@/components/AppNav";
 import Mark from "@/components/Mark";
-import { daysLeft, getProfile } from "@/lib/data";
+import { daysLeft, getProfile, readAttention } from "@/lib/data";
 import { SITE } from "@/lib/site";
 import { currentUserId } from "@/lib/supabase/server";
 
@@ -11,7 +11,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userId = await currentUserId();
   if (!userId) redirect("/login");
 
-  const profile = await getProfile(userId);
+  const [profile, attention] = await Promise.all([getProfile(userId), readAttention(userId)]);
   const left = daysLeft(profile);
 
   return (
@@ -30,7 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Mark size={22} />
               <span className="display text-xl">{SITE.name}</span>
             </Link>
-            <DesktopNav />
+            <DesktopNav attention={attention} />
           </div>
 
           <div className="flex items-center gap-4">
@@ -50,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <div className="mx-auto max-w-[1200px] px-6 pb-20">{children}</div>
 
-      <MobileNav />
+      <MobileNav attention={attention} />
     </div>
   );
 }

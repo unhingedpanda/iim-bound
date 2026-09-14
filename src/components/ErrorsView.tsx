@@ -157,7 +157,9 @@ export default function ErrorsView({
         </h2>
         <ul>
           {mistakes.length === 0 ? (
-            <li className="py-6 text-ink-2">Nothing logged yet.</li>
+            <li className="py-6 text-ink-2">
+              {demo ? "No mistakes logged — nice." : "Nothing logged yet."}
+            </li>
           ) : (
             mistakes.map((m) => (
               <li

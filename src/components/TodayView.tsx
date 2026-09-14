@@ -14,6 +14,7 @@ export default function TodayView({
   summary,
   phase,
   drills,
+  drills7,
   drillDefs,
   run,
   leadingBlanks,
@@ -27,6 +28,8 @@ export default function TodayView({
   summary: { minutes: number; done: number };
   phase: Phase | null;
   drills: Record<string, DrillState>;
+  /** Per-drill, the last seven days as 0/1 done; today is last. */
+  drills7: Record<string, number[]>;
   drillDefs: Drill[];
   run: RunCell[];
   leadingBlanks: number;
@@ -75,7 +78,13 @@ export default function TodayView({
         <h2 id="drills-h" className="sr-only">
           Today&rsquo;s drills
         </h2>
-        <DrillBoard day={today} drills={drillDefs} initial={drills} readOnly={readOnly} />
+        <DrillBoard
+          day={today}
+          drills={drillDefs}
+          initial={drills}
+          week={drills7}
+          readOnly={readOnly}
+        />
       </section>
 
       <section className="rule-heavy mt-16 pt-5" aria-labelledby="run-h">

@@ -1,7 +1,7 @@
 import TodayView from "@/components/TodayView";
 import { addDays, longDate, weekdayIndex } from "@/lib/dates";
 import { today } from "@/lib/day";
-import { demoDrillDefs, demoDrills, demoRun } from "@/lib/demo";
+import { demoDrillDefs, demoDrills, demoDrills7, demoRun } from "@/lib/demo";
 import { DEFAULTS, phaseFor } from "@/lib/plan";
 
 export const metadata = {
@@ -27,6 +27,7 @@ export default function DemoPage() {
       }}
       phase={phaseFor(day)}
       drills={drills}
+      drills7={demoDrills7()}
       drillDefs={drillDefs}
       run={demoRun(start, DEFAULTS.examDate, day)}
       leadingBlanks={weekdayIndex(start)}

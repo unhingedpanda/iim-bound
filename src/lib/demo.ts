@@ -23,6 +23,21 @@ export function demoDrills(): Record<string, DrillState> {
   return state;
 }
 
+/** Per-drill week strip for the demo: a slanted 0/1 pattern per slug. */
+export function demoDrills7(): Record<string, number[]> {
+  const state: Record<string, number[]> = {};
+  demoDrillDefs().forEach((drill, i) => {
+    const patterns = [
+      [1, 1, 0, 1, 1, 1, 0],
+      [1, 0, 1, 1, 0, 1, 1],
+      [1, 1, 1, 1, 1, 0, 1],
+      [0, 1, 0, 1, 0, 1, 0],
+    ];
+    state[drill.slug] = patterns[i % patterns.length] ?? [1, 1, 1, 1, 1, 1, 1];
+  });
+  return state;
+}
+
 /** Deterministic history so the demo looks the same for everyone. */
 export function demoRun(start: string, end: string, today: string): RunCell[] {
   const total = Math.max(1, daysBetween(start, end));

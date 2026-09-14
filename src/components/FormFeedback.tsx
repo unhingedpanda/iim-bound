@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 
 /**
  * Running a Server Action from a client component, with the failure kept.
@@ -48,6 +48,85 @@ export function useFormAction<T = unknown>(
   const dismiss = useCallback(() => setError(null), []);
 
   return { run, pending, error, dismiss };
+}
+
+/* ----------------------------------------------------- saved feedback pill */
+
+/**
+ * Non-visual users get a polite announcement; everyone else sees a short
+ * "Saved" pill that dismisses itself. Timing is owned here so every caller
+ * passes the same duration.
+ */
+export function SavedPill({ shown, text = "Saved." }: { shown: boolean; text?: string }) {
+  return (
+    <>
+      <span aria-live="polite" className="sr-only">
+        {shown ? text : ""}
+      </span>
+      {shown ? (
+        <span
+          className="note-in border-2 border-signal px-2 py-0.5 text-xs font-bold text-signal"
+          aria-hidden="true"
+        >
+          Saved
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+/** Fires `shown` true for the pill window, then flips it back false. */
+export function useSavedPill(windowMs = 1600) {
+  const [shown, setShown] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  const poke = useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current);
+    setShown(true);
+    timer.current = window.setTimeout(() => setShown(false), windowMs);
+  }, [windowMs]);
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  return { shown, poke };
+}
+
+/* ---------------------------------------------------------- confirmation */
+
+/**
+ * Turns a plain submit into a two-step "Are you sure?" for the few actions
+ * that cannot be undone (removing a mock, deleting a topic). The confirm state
+ * resets itself after a short window so a stray click does not leave a loaded
+ * button on the page.
+ */
+export function useConfirm(timeoutMs = 4000) {
+  const [confirming, setConfirming] = useState(false);
+  const timer = useRef<number | null>(null);
+
+  const request = useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current);
+    setConfirming(true);
+    timer.current = window.setTimeout(() => setConfirming(false), timeoutMs);
+  }, [timeoutMs]);
+
+  const cancel = useCallback(() => {
+    if (timer.current) window.clearTimeout(timer.current);
+    setConfirming(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  return { confirming, request, cancel };
 }
 
 /** The one place a failed write is shown. */
@@ -103,5 +182,31 @@ export function ActionForm({
         <ErrorNote error={error} />
       </div>
     </form>
+  );
+}
+
+/**
+ * A floating action helper rendered as a proper labeled group.
+ *
+ * The previous markup wrapped a submit button in an arbitrary <div> with no
+ * role or label, which meant screen readers announced "group" with no name.
+ * This renders an <aside> labelled by its purpose so assistive tech can name
+ * the tool under it.
+ */
+export function AccessibleTool({
+  label,
+  children,
+  className = "",
+}: {
+  /** Spoken name of the tool, e.g. "Running drill timer". */
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <aside aria-label={label} className={`mt-3 border-t-2 border-ink pt-4 ${className}`}>
+      <p className="text-sm font-semibold text-ink-2">{label}</p>
+      {children}
+    </aside>
   );
 }

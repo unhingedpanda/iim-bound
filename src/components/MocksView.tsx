@@ -1,6 +1,6 @@
-import { deleteMock, setMockReviewed } from "@/app/actions";
 import AddMockForm from "@/components/AddMockForm";
 import MockChart, { type ChartPoint } from "@/components/MockChart";
+import { MockRow } from "@/components/MockRow";
 import {
   attemptDiagnosis,
   estimate,
@@ -13,7 +13,7 @@ import {
   TOTAL_MARKS,
 } from "@/lib/cat";
 import type { Mock } from "@/lib/data";
-import { daysBetween, shortDate } from "@/lib/dates";
+import { daysBetween } from "@/lib/dates";
 import { latestLoggableDay, today } from "@/lib/day";
 import { mockCadence, SECTIONS, type Section } from "@/lib/plan";
 
@@ -110,106 +110,128 @@ export default function MocksView({
   return (
     <main className="pb-10">
       {/* ------------------------------------------------------------ hero */}
-      <section className="rule-heavy mt-8 pt-5">
-        <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
-          <h1 className="display min-w-0 text-[clamp(40px,8vw,88px)]">
-            {latestSummary?.net ?? "—"}
-            <span className="text-ink-3">
-              /
-              {latestSummary?.complete
-                ? TOTAL_MARKS
-                : paperMarks(latestSummary?.sectionsLogged ?? 0)}
-            </span>
-            <span className="mt-3 block text-base font-semibold leading-tight tracking-normal sm:text-lg text-ink-2">
-              net marks{latest ? ` · ${latest.series}` : " · no mock logged yet"}
-              {latestSummary && !latestSummary.complete && latestSummary.sectionsLogged > 0
-                ? ` · ${latestSummary.sectionsLogged} of 3 sections`
-                : ""}
-            </span>
-          </h1>
+      {mocks.length === 0 ? (
+        /* A real empty state: what this screen is for, and the one button that
+           gets it going. Nothing else renders because nothing else loads. */
+        <section className="rule-heavy mt-8 pt-5">
+          <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
+            <h1 id="mocks-empty-h" className="display text-[clamp(40px,8vw,88px)]">
+              No mocks yet.
+              <span className="mt-3 block text-base font-semibold leading-tight tracking-normal sm:text-lg text-ink-2">
+                this is the one that tells you where you actually stand
+              </span>
+            </h1>
+            <p className="max-w-[46ch] text-lg text-ink-2">
+              Log a mock by what you actually did — questions attempted and questions right, per
+              section. Net score, accuracy and an estimated percentile come out of that, so a past
+              paper counts just as much as a paid series.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section className="rule-heavy mt-8 pt-5">
+          <div className="flex flex-wrap items-end justify-between gap-x-10 gap-y-6">
+            <h1 className="display min-w-0 text-[clamp(40px,8vw,88px)]">
+              {latestSummary?.net ?? "—"}
+              <span className="text-ink-3">
+                /
+                {latestSummary?.complete
+                  ? TOTAL_MARKS
+                  : paperMarks(latestSummary?.sectionsLogged ?? 0)}
+              </span>
+              <span className="mt-3 block text-base font-semibold leading-tight tracking-normal sm:text-lg text-ink-2">
+                net marks{latest ? ` · ${latest.series}` : " · no mock logged yet"}
+                {latestSummary && !latestSummary.complete && latestSummary.sectionsLogged > 0
+                  ? ` · ${latestSummary.sectionsLogged} of 3 sections`
+                  : ""}
+              </span>
+            </h1>
 
-          <div className="max-w-[46ch]">
-            {latestSummary?.percentile != null ? (
-              <>
-                <p className="text-lg">
-                  That is about{" "}
-                  <span className="display text-[1.6em] leading-none">
-                    {pct(latestSummary.percentile)}
-                  </span>{" "}
-                  overall.{" "}
-                  {latestSummary.estimated ? (
-                    <span className="text-ink-3">
-                      Estimated from CAT 2025&rsquo;s published score-to-percentile data — the
-                      series&rsquo; own number, once you have it, replaces this.
-                    </span>
-                  ) : (
-                    <span className="text-ink-3">As reported by the series.</span>
-                  )}
-                </p>
-                {basisNote(latestSummary.basis) ? (
-                  <p className="mt-2 text-sm text-ink-3">{basisNote(latestSummary.basis)}</p>
-                ) : null}
-                {gap != null ? (
-                  <p className="mt-4 border-l-4 border-signal py-1 pl-4">
-                    {gap > 0.005 ? (
-                      <>
-                        <span className="font-bold">{gap.toFixed(1)} marks</span> short of{" "}
-                        {targetPercentile}. That is {Math.ceil(gap / MARK_CORRECT)} more correct
-                        answer
-                        {Math.ceil(gap / MARK_CORRECT) === 1 ? "" : "s"} across the whole paper.
-                      </>
-                    ) : gap < -0.005 ? (
-                      <>
-                        Past {targetPercentile} on this one, by{" "}
-                        <span className="font-bold">{Math.abs(gap).toFixed(1)} marks</span>. Now do
-                        it twice more.
-                      </>
+            <div className="max-w-[46ch]">
+              {latestSummary?.percentile != null ? (
+                <>
+                  <p className="text-lg">
+                    That is about{" "}
+                    <span className="display text-[1.6em] leading-none">
+                      {pct(latestSummary.percentile)}
+                    </span>{" "}
+                    overall.{" "}
+                    {latestSummary.estimated ? (
+                      <span className="text-ink-3">
+                        Estimated from CAT 2025&rsquo;s published score-to-percentile data — the
+                        series&rsquo; own number, once you have it, replaces this.
+                      </span>
                     ) : (
-                      <>Right on {targetPercentile} with this one. Now do it twice more.</>
+                      <span className="text-ink-3">As reported by the series.</span>
                     )}
                   </p>
-                ) : null}
-              </>
-            ) : (
-              <p className="text-lg text-ink-2">
-                Log a mock by what you actually did — questions attempted and questions right, per
-                section. Net score, accuracy and an estimated percentile come out of that, so a past
-                paper counts just as much as a paid series.
-              </p>
-            )}
+                  {basisNote(latestSummary.basis) ? (
+                    <p className="mt-2 text-sm text-ink-3">{basisNote(latestSummary.basis)}</p>
+                  ) : null}
+                  {gap != null ? (
+                    <p className="mt-4 border-l-4 border-signal py-1 pl-4">
+                      {gap > 0.005 ? (
+                        <>
+                          <span className="font-bold">{gap.toFixed(1)} marks</span> short of{" "}
+                          {targetPercentile}. That is {Math.ceil(gap / MARK_CORRECT)} more correct
+                          answer
+                          {Math.ceil(gap / MARK_CORRECT) === 1 ? "" : "s"} across the whole paper.
+                        </>
+                      ) : gap < -0.005 ? (
+                        <>
+                          Past {targetPercentile} on this one, by{" "}
+                          <span className="font-bold">{Math.abs(gap).toFixed(1)} marks</span>. Now
+                          do it twice more.
+                        </>
+                      ) : (
+                        <>Right on {targetPercentile} with this one. Now do it twice more.</>
+                      )}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-lg text-ink-2">
+                  Log a mock by what you actually did — questions attempted and questions right, per
+                  section. Net score, accuracy and an estimated percentile come out of that, so a
+                  past paper counts just as much as a paid series.
+                </p>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* ------------------------------------------------- analysis debt */}
-        {oldestUnreviewed ? (
-          <p className="mt-8 border-l-4 border-flag bg-paper-2 px-4 py-3 text-flag">
-            <span className="font-bold">
-              {unreviewed.length} mock{unreviewed.length > 1 ? "s" : ""} unanalysed
-            </span>{" "}
-            — the oldest sat {(() => {
-              const daysAgo = Math.max(0, daysBetween(oldestUnreviewed.taken_on, day));
-              if (daysAgo === 0) return "today";
-              return `${daysAgo} day${daysAgo > 1 ? "s" : ""} ago`;
-            })()}. Sitting a mock costs two hours; skipping the review wastes them.
-          </p>
-        ) : null}
-      </section>
+          {/* ------------------------------------------------- analysis debt */}
+          {oldestUnreviewed ? (
+            <p className="mt-8 border-l-4 border-flag bg-paper-2 px-4 py-3 text-flag">
+              <span className="font-bold">
+                {unreviewed.length} mock{unreviewed.length > 1 ? "s" : ""} unanalysed
+              </span>{" "}
+              — the oldest sat {(() => {
+                const daysAgo = Math.max(0, daysBetween(oldestUnreviewed.taken_on, day));
+                if (daysAgo === 0) return "today";
+                return `${daysAgo} day${daysAgo > 1 ? "s" : ""} ago`;
+              })()}. Sitting a mock costs two hours; skipping the review wastes them.
+            </p>
+          ) : null}
+        </section>
+      )}
 
       {/* --------------------------------------------------------- cadence */}
-      <section className="mt-12" aria-labelledby="cadence-h">
-        <h2 id="cadence-h" className="text-sm text-ink-3">
-          Cadence
-        </h2>
-        <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t-2 border-ink pt-4">
-          <p className="display text-[clamp(22px,3vw,32px)]">
-            {lastWeek}
-            <span className="text-ink-3"> of {cadence.perWeek}</span>
-          </p>
-          <p className="text-ink-2">
-            mocks in the last seven days, with {daysLeft} days to go. {cadence.note}
-          </p>
-        </div>
-      </section>
+      {mocks.length ? (
+        <section className="mt-12" aria-labelledby="cadence-h">
+          <h2 id="cadence-h" className="text-sm text-ink-3">
+            Cadence
+          </h2>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-2 border-t-2 border-ink pt-4">
+            <p className="display text-[clamp(22px,3vw,32px)]">
+              {lastWeek}
+              <span className="text-ink-3"> of {cadence.perWeek}</span>
+            </p>
+            <p className="text-ink-2">
+              mocks in the last seven days, with {daysLeft} days to go. {cadence.note}
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {/* --------------------------------------------------- section board */}
       {form.length ? (
@@ -272,107 +294,35 @@ export default function MocksView({
       ) : null}
 
       {/* ----------------------------------------------------------- chart */}
-      <section className="mt-16" aria-labelledby="trace-h">
-        <h2 id="trace-h" className="text-sm text-ink-3">
-          Overall percentile over time
-        </h2>
-        <div className="mt-3 overflow-x-auto">
-          <MockChart points={points} target={targetPercentile} floor={sectionFloor} />
-        </div>
-      </section>
+      {mocks.length ? (
+        <section className="mt-16" aria-labelledby="trace-h">
+          <h2 id="trace-h" className="text-sm text-ink-3">
+            Overall percentile over time
+          </h2>
+          <div className="mt-3 overflow-x-auto">
+            <MockChart points={points} target={targetPercentile} floor={sectionFloor} />
+          </div>
+        </section>
+      ) : null}
 
       {/* ------------------------------------------------------------- log */}
-      <section className="mt-16" aria-labelledby="log-h">
-        <h2 id="log-h" className="display border-b-2 border-ink pb-3 text-[clamp(24px,4vw,36px)]">
-          The log
-        </h2>
-        <p className="mt-3 text-sm text-ink-3">
-          Each section reads correct of attempted, then net marks, then the percentile that score
-          was worth.
-        </p>
+      {mocks.length ? (
+        <section className="mt-16" aria-labelledby="log-h">
+          <h2 id="log-h" className="display border-b-2 border-ink pb-3 text-[clamp(24px,4vw,36px)]">
+            The log
+          </h2>
+          <p className="mt-3 text-sm text-ink-3">
+            Each section reads correct of attempted, then net marks, then the percentile that score
+            was worth.
+          </p>
 
-        {mocks.length === 0 ? (
-          <p className="py-6 text-ink-2">Nothing logged yet.</p>
-        ) : (
           <ul>
-            {[...mocks].reverse().map((mock) => {
-              const s = summarise(mock);
-              return (
-                <li key={mock.id} className="border-b border-line py-6">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
-                    <h3 className="flex flex-wrap items-baseline gap-3">
-                      <span className="display text-xl">{mock.series}</span>
-                      <span className="text-sm text-ink-3">{shortDate(mock.taken_on)}</span>
-                      {mock.reviewed ? null : (
-                        <span className="border-2 border-flag px-2 py-0.5 text-[11px] font-bold text-flag">
-                          unanalysed
-                        </span>
-                      )}
-                    </h3>
-                    <p className="flex items-baseline gap-2">
-                      <span className="display text-2xl">{s.net ?? "—"}</span>
-                      <span className="text-sm text-ink-3">net</span>
-                      <span className="display ml-3 text-2xl">{pct(s.percentile)}</span>
-                      <span className="text-sm text-ink-3">{s.estimated ? "est." : "%ile"}</span>
-                    </p>
-                  </div>
-
-                  <ul className="mt-4 grid gap-3 sm:grid-cols-3">
-                    {s.sections.map((sec) => {
-                      const low = sec.percentile !== null && sec.percentile < sectionFloor;
-                      return (
-                        <li
-                          key={sec.section}
-                          className="flex items-baseline justify-between gap-3 bg-paper-2 px-3 py-2 text-sm"
-                        >
-                          <span className="font-bold">{sec.section}</span>
-                          <span className="text-ink-2">
-                            {sec.attempted === null
-                              ? "—"
-                              : `${sec.correct}/${sec.attempted} · ${sec.net} net`}
-                          </span>
-                          <span className={low ? "font-bold text-flag" : ""}>
-                            {pct(sec.percentile)}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-
-                  {mock.takeaway ? (
-                    <p className="mt-4 border-l-4 border-line pl-4 text-ink-2 italic">
-                      {mock.takeaway}
-                    </p>
-                  ) : null}
-
-                  {demo ? null : (
-                    <div className="mt-4 flex flex-wrap gap-5 text-sm">
-                      <form action={setMockReviewed}>
-                        <input type="hidden" name="id" value={mock.id} />
-                        <input type="hidden" name="reviewed" value={String(!mock.reviewed)} />
-                        <button
-                          type="submit"
-                          className={`underline underline-offset-4 ${
-                            mock.reviewed ? "text-ink-3" : "font-semibold text-flag"
-                          }`}
-                        >
-                          {mock.reviewed ? "Mark unanalysed" : "Mark analysed"}
-                        </button>
-                      </form>
-                      <form action={deleteMock}>
-                        <input type="hidden" name="id" value={mock.id} />
-                        <button type="submit" className="text-ink-3 underline underline-offset-4">
-                          Remove
-                        </button>
-                      </form>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
+            {[...mocks].reverse().map((mock) => (
+              <MockRow key={mock.id} mock={mock} sectionFloor={sectionFloor} demo={demo} />
+            ))}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
 
       {/* ------------------------------------------------------- add a mock */}
       <section className="rule-heavy mt-16 pt-5" aria-labelledby="add-h">

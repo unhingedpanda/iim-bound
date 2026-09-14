@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { logMinutes, toggleDrill } from "@/app/actions";
-import { ErrorNote, useFormAction } from "@/components/FormFeedback";
+import { ErrorNote, SavedPill, useFormAction, useSavedPill } from "@/components/FormFeedback";
 import type { Drill } from "@/lib/plan";
 
 export type DrillState = { minutes: number; done: boolean };
@@ -16,15 +16,48 @@ function clock(seconds: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * Seven tiny squares under a drill, one per day for the last week.
+ * Today is the right-most square. Purely decorative for assistive tech —
+ * the list's sr-only summary carries the fact.
+ */
+function WeekAccents({ week, label }: { week: number[] | undefined; label: string }) {
+  if (!week?.length) return null;
+  const done = week.filter(Boolean).length;
+  return (
+    <span
+      className="flex items-center gap-[3px]"
+      role="img"
+      aria-label={`${done} of the last 7 days for ${label}`}
+    >
+      {week.map((d, i) => (
+        <span
+          // Days here are positional, order never changes within a session.
+          // biome-ignore lint/suspicious/noArrayIndexKey: static positional strip
+          key={i}
+          className="size-[7px]"
+          style={{
+            background: d ? "var(--ink)" : "var(--paper-3)",
+            opacity: i === week.length - 1 ? 1 : 0.85,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
 export default function DrillBoard({
   day,
   drills,
   initial,
+  week,
   readOnly = false,
 }: {
   day: string;
   drills: Drill[];
   initial: Record<string, DrillState>;
+  /** Per-drill, the last seven days as 0/1 done; today is last. */
+  week?: Record<string, number[]>;
   readOnly?: boolean;
 }) {
   const [state, setState] = useState(initial);
@@ -35,6 +68,7 @@ export default function DrillBoard({
   const startedAt = useRef(0);
   /** The drill the in-flight session belongs to, read back when it lands. */
   const sessionDrill = useRef<string | null>(null);
+  const saved = useSavedPill();
 
   useEffect(() => setState(initial), [initial]);
 
@@ -57,14 +91,18 @@ export default function DrillBoard({
   // The RPC answers with the day's stored minutes for that drill, so the
   // optimistically-added figure is replaced by the authoritative one instead
   // of drifting from it.
-  const onSessionSaved = useCallback((minutes: unknown) => {
-    const key = sessionDrill.current;
-    if (typeof minutes !== "number" || !key) return;
-    setState((prev) => ({ ...prev, [key]: { minutes, done: prev[key]?.done ?? false } }));
-  }, []);
+  const onSessionSaved = useCallback(
+    (minutes: unknown) => {
+      const key = sessionDrill.current;
+      if (typeof minutes !== "number" || !key) return;
+      setState((prev) => ({ ...prev, [key]: { minutes, done: prev[key]?.done ?? false } }));
+      saved.poke();
+    },
+    [saved],
+  );
 
   const session = useFormAction(logMinutes, onSessionSaved);
-  const tick = useFormAction(toggleDrill);
+  const tick = useFormAction(toggleDrill, () => saved.poke());
 
   function start(key: string) {
     if (running) stop();
@@ -119,9 +157,38 @@ export default function DrillBoard({
     });
   }
 
+  const runningDrill = running ? drills.find((d) => d.slug === running) : null;
+
   return (
     <>
       <ErrorNote error={session.error ?? tick.error} onDismiss={session.dismiss} />
+
+      {/* Pinned strip: the running timer stays reachable from anywhere on the
+          page, and from other screens only stops mattering once stopped. */}
+      {runningDrill ? (
+        <div
+          className="fixed inset-x-0 bottom-[54px] z-30 border-t-2 border-ink bg-paper sm:bottom-0 sm:border-b-2 sm:border-t-0 sm:top-0"
+          aria-live="polite"
+        >
+          <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 px-6 py-2.5">
+            <span className="flex min-w-0 items-baseline gap-3">
+              <span className="display truncate text-lg">{runningDrill.label}</span>
+              <span className="text-sm tabular-nums text-ink-2">{clock(elapsed)}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-3">
+              <SavedPill shown={saved.shown} />
+              <button
+                type="button"
+                onClick={stop}
+                className="bg-signal px-4 py-1.5 text-sm font-semibold text-signal-ink"
+              >
+                Stop
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       <ul className="mt-6 grid gap-6">
         {drills.map((drill) => {
           const current = state[drill.slug] ?? { minutes: 0, done: false };
@@ -177,7 +244,10 @@ export default function DrillBoard({
                 </div>
               </div>
 
-              <p className="mt-1 pl-8 text-sm text-ink-3">{drill.blurb}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-3 pl-8">
+                <p className="text-sm text-ink-3">{drill.blurb}</p>
+                <WeekAccents week={week?.[drill.slug]} label={drill.label} />
+              </div>
 
               <span className="meter mt-3" data-done={current.done} aria-hidden="true">
                 <span style={{ "--fill": pct / 100 } as React.CSSProperties} />
